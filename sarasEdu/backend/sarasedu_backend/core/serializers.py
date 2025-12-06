@@ -36,7 +36,16 @@ class RegisterSerializer(serializers.ModelSerializer):
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ('id', 'username', 'email', 'first_name', 'last_name', 'role', 'avatar_url')
+        fields = ('id', 'username', 'email', 'first_name', 'last_name', 'role', 'avatar_url', 'bio', 'phone', 'date_joined')
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(write_only=True)
+
+    def validate_new_password(self, value):
+        validate_password(value)
+        return value
 
 
 class StudentProfileSerializer(serializers.ModelSerializer):

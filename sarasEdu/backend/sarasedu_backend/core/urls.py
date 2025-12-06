@@ -2,7 +2,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
     RegisterView, me, CustomTokenObtainPairView, AIChatView, AIImageView, AITranscribeView,
-    PasswordResetRequestView, PasswordResetConfirmView,
+    PasswordResetRequestView, PasswordResetConfirmView, ChangePasswordView,
     CourseLecturesView, UserDetailView, LibraryListCreateView, LibraryDetailView, LibraryDownloadView, AssignmentSubmitView,
     DriveProxyView,
 )
@@ -41,6 +41,7 @@ urlpatterns = [
     path('auth/register', RegisterView.as_view(), name='auth_register'),
     path('auth/refresh', TokenRefreshView.as_view(), name='token_refresh'),
     path('auth/me', me, name='auth_me'),
+    path('auth/change-password', ChangePasswordView.as_view(), name='auth_change_password'),
     path('auth/password-reset', PasswordResetRequestView.as_view(), name='auth_password_reset'),
     path('auth/password-reset/confirm', PasswordResetConfirmView.as_view(), name='auth_password_reset_confirm'),
     path('ai/chat', AIChatView.as_view(), name='ai_chat'),

@@ -535,6 +535,55 @@ export async function getAssignmentAttachments(assignmentId) {
   return data || [];
 }
 
+// User Profile Management API
+export async function getUserProfile(userId) {
+  if (!userId) throw new Error('Missing user id');
+  return await request(`/auth/me`, { method: 'GET' });
+}
+
+export async function updateUserProfile(payload) {
+  // payload: { phone, bio, avatar_url }
+  return await request('/auth/me', { method: 'PATCH', body: JSON.stringify(payload), headers: { 'Content-Type': 'application/json' } });
+}
+
+export async function getStudentProfile(userId) {
+  if (!userId) throw new Error('Missing user id');
+  return await request(`/student-profiles/${userId}/`, { method: 'GET' });
+}
+
+export async function updateStudentProfile(userId, payload) {
+  if (!userId) throw new Error('Missing user id');
+  return await request(`/student-profiles/${userId}/`, { method: 'PATCH', body: JSON.stringify(payload), headers: { 'Content-Type': 'application/json' } });
+}
+
+export async function getTeacherProfile(userId) {
+  if (!userId) throw new Error('Missing user id');
+  return await request(`/teacher-profiles/${userId}/`, { method: 'GET' });
+}
+
+export async function updateTeacherProfile(userId, payload) {
+  if (!userId) throw new Error('Missing user id');
+  return await request(`/teacher-profiles/${userId}/`, { method: 'PATCH', body: JSON.stringify(payload), headers: { 'Content-Type': 'application/json' } });
+}
+
+export async function getAdminProfile(userId) {
+  if (!userId) throw new Error('Missing user id');
+  return await request(`/admin-profiles/${userId}/`, { method: 'GET' });
+}
+
+export async function updateAdminProfile(userId, payload) {
+  if (!userId) throw new Error('Missing user id');
+  return await request(`/admin-profiles/${userId}/`, { method: 'PATCH', body: JSON.stringify(payload), headers: { 'Content-Type': 'application/json' } });
+}
+
+export async function changePassword(oldPassword, newPassword) {
+  return await request('/auth/change-password', { 
+    method: 'POST', 
+    body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }), 
+    headers: { 'Content-Type': 'application/json' } 
+  });
+}
+
 export default {
   login,
   register,
@@ -565,4 +614,13 @@ export default {
   submitAssignment,
   getAssignmentAttachments,
   updateAssignmentSubmission,
+  getUserProfile,
+  updateUserProfile,
+  getStudentProfile,
+  updateStudentProfile,
+  getTeacherProfile,
+  updateTeacherProfile,
+  getAdminProfile,
+  updateAdminProfile,
+  changePassword,
 };
