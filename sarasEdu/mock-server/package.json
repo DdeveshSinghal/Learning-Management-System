@@ -1,0 +1,12 @@
+{
+  "name": "saraSEdu-mock-server",
+  "version": "1.0.0",
+  "description": "Prism mock server scaffold for SarasEduHub OpenAPI spec",
+  "private": true,
+  "scripts": {
+    "start": "npx @stoplight/prism-cli mock ../docs/openapi.yaml -p 4010"
+  },
+  "devDependencies": {
+    "@stoplight/prism-cli": "^4.9.3"
+  }
+}

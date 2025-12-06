@@ -1,0 +1,47 @@
+name: Upload Integration Test
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+
+jobs:
+  upload-integration:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.10, 3.11]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Compose
+        run: |
+          cd backend
+          docker-compose up -d --build
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Create MinIO bucket (health-check)
+        run: |
+          # Ensure the sarasedu bucket exists and is accessible from the host
+          python3 backend/scripts/create_minio_bucket.py
+
+      - name: Wait for backend
+        run: |
+          # wait up to 60s for backend to be responsive
+          python3 backend/scripts/wait_for_backend.py
+
+      - name: Run upload integration tests
+        run: |
+          python3 -m pip install pytest requests
+          pytest -q backend/tests/test_uploads.py
+
+      - name: Tear down
+        if: always()
+        run: |
+          cd backend
+          docker-compose down -v

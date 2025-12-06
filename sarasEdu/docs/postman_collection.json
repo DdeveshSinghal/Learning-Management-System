@@ -1,0 +1,118 @@
+{
+  "info": {
+    "name": "SarasEduHub API - Mock",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0",
+    "description": "Postman collection generated from docs/openapi.yaml. Use the variable `baseUrl` to point to the mock server (default http://localhost:4010)."
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4010",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@student.com\",\n  \"password\": \"correct-horse-battery-staple\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api","auth","login"] }
+          }
+        },
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john.doe@student.com\",\n  \"password\": \"strong-password-123\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/auth/register", "host": ["{{baseUrl}}"], "path": ["api","auth","register"] }
+          }
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{authToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/api/auth/me", "host": ["{{baseUrl}}"], "path": ["api","auth","me"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Courses",
+      "item": [
+        {
+          "name": "List Courses",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/courses", "host": ["{{baseUrl}}"], "path": ["api","courses"] } }
+        },
+        {
+          "name": "Get Course",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/courses/:id", "host": ["{{baseUrl}}"], "path": ["api","courses",":id"] }, "description": "Replace :id with course id" }
+        },
+        {
+          "name": "Course Lectures",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/courses/:id/lectures", "host": ["{{baseUrl}}"], "path": ["api","courses",":id","lectures"] }, "description": "Replace :id with course id" }
+        }
+      ]
+    },
+    {
+      "name": "Enrollments",
+      "item": [
+        {
+          "name": "Enroll Student",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"student_id\": 5,\n  \"course_id\": 1\n}" },
+            "url": { "raw": "{{baseUrl}}/api/enrollments", "host": ["{{baseUrl}}"], "path": ["api","enrollments"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Assignments & Tests",
+      "item": [
+        { "name": "List Assignments", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/assignments", "host": ["{{baseUrl}}"], "path": ["api","assignments"] } } },
+        { "name": "Create Assignment (form-data)", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/assignments", "host": ["{{baseUrl}}"], "path": ["api","assignments"] } } },
+        { "name": "Submit Assignment (form-data)", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/assignments/:id/submissions", "host": ["{{baseUrl}}"], "path": ["api","assignments",":id","submissions"] }, "description":"Replace :id with assignment id" } },
+        { "name": "List Tests", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/tests", "host": ["{{baseUrl}}"], "path": ["api","tests"] } } }
+      ]
+    },
+    {
+      "name": "Events & Library",
+      "item": [
+        { "name": "List Events", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/events", "host": ["{{baseUrl}}"], "path": ["api","events"] } } },
+        { "name": "Create Event", "request": { "method": "POST", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\n  \"title\": \"Sample Event\",\n  \"event_date\": \"2025-11-20\",\n  \"start_time\": \"10:00:00\",\n  \"end_time\": \"11:00:00\"\n}" }, "url": { "raw": "{{baseUrl}}/api/events", "host": ["{{baseUrl}}"], "path": ["api","events"] } } },
+        { "name": "List Library Items", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/library", "host": ["{{baseUrl}}"], "path": ["api","library"] } } },
+        { "name": "Upload Library Item (form-data)", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/library", "host": ["{{baseUrl}}"], "path": ["api","library"] } } }
+      ]
+    },
+    {
+      "name": "Announcements",
+      "item": [ { "name": "List Announcements", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/announcements", "host": ["{{baseUrl}}"], "path": ["api","announcements"] } } } ]
+    },
+    {
+      "name": "AI & Uploads",
+      "item": [
+        { "name": "AI Chat", "request": { "method": "POST", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\n  \"message\": \"Hello, help me with calculus\"\n}" , "url": { "raw": "{{baseUrl}}/api/ai/chat", "host": ["{{baseUrl}}"], "path": ["api","ai","chat"] } } },
+        { "name": "Upload File", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/uploads", "host": ["{{baseUrl}}"], "path": ["api","uploads"] } } }
+      ]
+    }
+  ]
+}
