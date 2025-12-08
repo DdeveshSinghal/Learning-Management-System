@@ -632,6 +632,30 @@ export async function deleteAllNotifications() {
   });
 }
 
+// Enrollment functions
+export async function getEnrollments() {
+  const data = await request('/enrollments/');
+  if (data && data.results) return data.results;
+  return data || [];
+}
+
+export async function enrollInCourse(courseId, studentId) {
+  return await request('/enrollments/', {
+    method: 'POST',
+    body: JSON.stringify({
+      course: courseId,
+      student: studentId,
+      status: 'active'
+    }),
+    headers: { 'Content-Type': 'application/json' }
+  });
+}
+
+export async function checkEnrollment(courseId, studentId) {
+  const enrollments = await getEnrollments();
+  return enrollments.find(e => e.course === courseId && e.student === studentId);
+}
+
 export default {
   login,
   register,
@@ -678,4 +702,7 @@ export default {
   markAllNotificationsAsRead,
   deleteNotification,
   deleteAllNotifications,
+  getEnrollments,
+  enrollInCourse,
+  checkEnrollment,
 };

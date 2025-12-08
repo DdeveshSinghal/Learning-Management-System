@@ -34,7 +34,7 @@ import {
 // All user data is fetched from backend API. No sample data is shown.
 export function UserManagement({ userType, onSelectStudent }) {
 
-  const [activeTab, setActiveTab] = useState(userType === 'teacher' ? 'teachers' : 'students');
+  const [activeTab, setActiveTab] = useState('students');
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -78,6 +78,13 @@ export function UserManagement({ userType, onSelectStudent }) {
     specialization: '',
     officeHours: '',
   });
+
+  const isTeacher = userType === 'teacher';
+
+  const handleTabChange = (tab) => {
+    if (isTeacher && tab !== 'students') return;
+    setActiveTab(tab);
+  };
 
   const isThisMonth = (dateString) => {
     if (!dateString) return false;
@@ -1055,21 +1062,23 @@ export function UserManagement({ userType, onSelectStudent }) {
               </>
             )}
             
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => {
-                setSelectedUser(null);
-                openEditDialog(selectedUser, type);
-              }}>
-                <Edit className="h-4 w-4 mr-2" />
-                Edit
-              </Button>
-              <Button variant="destructive" onClick={() => {
-                handleRemoveUser(selectedUser, type);
-              }}>
-                <Trash2 className="h-4 w-4 mr-2" />
-                Remove
-              </Button>
-            </div>
+            {!isTeacher && (
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => {
+                  setSelectedUser(null);
+                  openEditDialog(selectedUser, type);
+                }}>
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit
+                </Button>
+                <Button variant="destructive" onClick={() => {
+                  handleRemoveUser(selectedUser, type);
+                }}>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Remove
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </DialogContent>
@@ -1122,14 +1131,18 @@ export function UserManagement({ userType, onSelectStudent }) {
                   <Eye className="h-3 w-3 mr-1" />
                   <span className="hidden sm:inline">View</span>
                 </Button>
-                <Button size="sm" variant="outline" className="flex-1 sm:flex-none text-xs sm:text-sm h-8 sm:h-9" onClick={() => openEditDialog(user, type)}>
-                  <Edit className="h-3 w-3 mr-1" />
-                  <span className="hidden sm:inline">Edit</span>
-                </Button>
-                <Button size="sm" variant="destructive" className="flex-1 sm:flex-none text-xs sm:text-sm h-8 sm:h-9" onClick={() => handleRemoveUser(user, type)}>
-                  <Trash2 className="h-3 w-3 mr-1" />
-                  <span className="hidden sm:inline">Remove</span>
-                </Button>
+                {!isTeacher && (
+                  <>
+                    <Button size="sm" variant="outline" className="flex-1 sm:flex-none text-xs sm:text-sm h-8 sm:h-9" onClick={() => openEditDialog(user, type)}>
+                      <Edit className="h-3 w-3 mr-1" />
+                      <span className="hidden sm:inline">Edit</span>
+                    </Button>
+                    <Button size="sm" variant="destructive" className="flex-1 sm:flex-none text-xs sm:text-sm h-8 sm:h-9" onClick={() => handleRemoveUser(user, type)}>
+                      <Trash2 className="h-3 w-3 mr-1" />
+                      <span className="hidden sm:inline">Remove</span>
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -1142,15 +1155,26 @@ export function UserManagement({ userType, onSelectStudent }) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold">User Management</h2>
-          <p className="text-muted-foreground">Manage students, teachers, and their information</p>
+          {isTeacher ? (
+            <>
+              <h2 className="text-3xl font-bold">Students Management</h2>
+              <p className="text-muted-foreground">Manage students and their information</p>
+            </>
+          ) : (
+            <>
+              <h2 className="text-3xl font-bold">User Management</h2>
+              <p className="text-muted-foreground">Manage students, teachers, and their information</p>
+            </>
+          )}
         </div>
-        <div className="flex items-center gap-2">
-          <Button onClick={() => setShowAddDialog(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add {activeTab === 'students' ? 'Student' : 'Teacher'}
-          </Button>
-        </div>
+        {!isTeacher && (
+          <div className="flex items-center gap-2">
+            <Button onClick={() => setShowAddDialog(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add {activeTab === 'students' ? 'Student' : 'Teacher'}
+            </Button>
+          </div>
+        )}
       </div>
 
       {loading ? (
@@ -1160,7 +1184,7 @@ export function UserManagement({ userType, onSelectStudent }) {
       ) : (
         <>
           {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className={`grid grid-cols-1 ${isTeacher ? 'md:grid-cols-3' : 'md:grid-cols-4'} gap-4`}>
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
@@ -1175,20 +1199,22 @@ export function UserManagement({ userType, onSelectStudent }) {
                 </div>
               </CardContent>
             </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
-                    <TeacherIcon className="h-5 w-5 text-green-600" />
+            {!isTeacher && (
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                      <TeacherIcon className="h-5 w-5 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Total Teachers</p>
+                      <p className="text-2xl font-bold">{teachersData.length}</p>
+                      <p className="text-xs text-blue-600">{teachersJoinedThisMonth} joined this month</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Total Teachers</p>
-                    <p className="text-2xl font-bold">{teachersData.length}</p>
-                    <p className="text-xs text-blue-600">{teachersJoinedThisMonth} joined this month</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            )}
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
@@ -1220,13 +1246,11 @@ export function UserManagement({ userType, onSelectStudent }) {
               </CardContent>
             </Card>
           </div>
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
             <div className="flex items-center justify-between">
               <TabsList>
-                {userType !== 'teacher' && (
-                  <TabsTrigger value="students">Students ({studentsData.length})</TabsTrigger>
-                )}
-                {userType !== 'student' && (
+                <TabsTrigger value="students">Students ({studentsData.length})</TabsTrigger>
+                {userType !== 'teacher' && userType !== 'student' && (
                   <TabsTrigger value="teachers">Teachers ({teachersData.length})</TabsTrigger>
                 )}
               </TabsList>

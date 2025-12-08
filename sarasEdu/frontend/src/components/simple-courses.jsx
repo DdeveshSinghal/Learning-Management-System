@@ -15,34 +15,82 @@ import {
   Filter,
   Eye,
   Edit,
-  Play
+  Play,
+  UserPlus
 } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { EnhancedCourseDetail } from './enhanced-course-detail';
 import { EnhancedCourseCreation } from './enhanced-course-creation';
 import api from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
+import { toast } from 'sonner';
 
 // Props/types removed for JS build. Courses should be fetched from an API.
 export function SimpleCourses({ userRole }) {
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [courseCreationMode, setCourseCreationMode] = useState(null);
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [enrollments, setEnrollments] = useState([]);
+  const [enrollingCourseId, setEnrollingCourseId] = useState(null);
 
   useEffect(() => {
     let mounted = true;
     setLoading(true);
-    api.getCourses()
-      .then((data) => {
-        if (mounted) setCourses(data || []);
-      })
-      .catch(() => {
-        if (mounted) setCourses([]);
-      })
-      .finally(() => mounted && setLoading(false));
+    
+    const fetchData = async () => {
+      try {
+        const [coursesData, enrollmentsData] = await Promise.all([
+          api.getCourses(),
+          userRole === 'student' ? api.getEnrollments() : Promise.resolve([])
+        ]);
+        
+        if (mounted) {
+          setCourses(coursesData || []);
+          setEnrollments(enrollmentsData || []);
+        }
+      } catch (error) {
+        if (mounted) {
+          setCourses([]);
+          setEnrollments([]);
+        }
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    
+    fetchData();
     return () => { mounted = false; };
-  }, []);
+  }, [userRole]);
+
+  const handleEnroll = async (courseId) => {
+    if (!user || !user.id) {
+      toast.error('Please log in to enroll in courses');
+      return;
+    }
+
+    setEnrollingCourseId(courseId);
+    try {
+      await api.enrollInCourse(courseId, user.id);
+      toast.success('Successfully enrolled in the course!');
+      
+      // Refresh enrollments
+      const updatedEnrollments = await api.getEnrollments();
+      setEnrollments(updatedEnrollments || []);
+    } catch (error) {
+      console.error('Enrollment error:', error);
+      toast.error(error.message || 'Failed to enroll in course');
+    } finally {
+      setEnrollingCourseId(null);
+    }
+  };
+
+  const isEnrolled = (courseId) => {
+    if (!user || !user.id) return false;
+    return enrollments.some(e => e.course === courseId && e.student === user.id);
+  };
 
   if (selectedCourse) {
     return (
@@ -160,19 +208,35 @@ export function SimpleCourses({ userRole }) {
                 
                 {userRole === 'student' ? (
                   <>
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-sm">
-                        <span>Progress</span>
-                        <span>{course.progress}%</span>
+                    {isEnrolled(course.id) ? (
+                      <>
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-sm">
+                            <span>Progress</span>
+                            <span>{course.progress || 0}%</span>
+                          </div>
+                          <Progress value={course.progress || 0} />
+                        </div>
+                        <div className="flex gap-2">
+                          <Button size="sm" className="flex-1" onClick={() => setSelectedCourse(course.id)}>
+                            <Play className="h-3 w-3 mr-1" />
+                            Continue Learning
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex gap-2">
+                        <Button 
+                          size="sm" 
+                          className="flex-1" 
+                          onClick={() => handleEnroll(course.id)}
+                          disabled={enrollingCourseId === course.id}
+                        >
+                          <UserPlus className="h-3 w-3 mr-1" />
+                          {enrollingCourseId === course.id ? 'Enrolling...' : 'Enroll Now'}
+                        </Button>
                       </div>
-                      <Progress value={course.progress} />
-                    </div>
-                    <div className="flex gap-2">
-                      <Button size="sm" className="flex-1" onClick={() => setSelectedCourse(course.id)}>
-                        <Play className="h-3 w-3 mr-1" />
-                        Continue Learning
-                      </Button>
-                    </div>
+                    )}
                   </>
                 ) : (
                   <>
