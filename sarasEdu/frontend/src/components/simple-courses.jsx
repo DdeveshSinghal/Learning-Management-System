@@ -35,6 +35,7 @@ export function SimpleCourses({ userRole }) {
   const [loading, setLoading] = useState(false);
   const [enrollments, setEnrollments] = useState([]);
   const [enrollingCourseId, setEnrollingCourseId] = useState(null);
+  const [courseEnrollmentCounts, setCourseEnrollmentCounts] = useState({});
 
   useEffect(() => {
     let mounted = true;
@@ -50,11 +51,35 @@ export function SimpleCourses({ userRole }) {
         if (mounted) {
           setCourses(coursesData || []);
           setEnrollments(enrollmentsData || []);
+          
+          // Fetch all enrollments to count per course
+          try {
+            const allEnrollments = await api.getEnrollments();
+            const enrollmentsByCount = {};
+            const enrollmentList = Array.isArray(allEnrollments) ? allEnrollments : allEnrollments.results || [];
+            
+            enrollmentList.forEach(enrollment => {
+              const courseId = enrollment.course;
+              if (courseId) {
+                enrollmentsByCount[courseId] = (enrollmentsByCount[courseId] || 0) + 1;
+              }
+            });
+            
+            if (mounted) {
+              setCourseEnrollmentCounts(enrollmentsByCount);
+            }
+          } catch (err) {
+            console.warn('Failed to fetch enrollment counts:', err);
+            if (mounted) {
+              setCourseEnrollmentCounts({});
+            }
+          }
         }
       } catch (error) {
         if (mounted) {
           setCourses([]);
           setEnrollments([]);
+          setCourseEnrollmentCounts({});
         }
       } finally {
         if (mounted) setLoading(false);
@@ -241,7 +266,7 @@ export function SimpleCourses({ userRole }) {
                 ) : (
                   <>
                     <div className="flex items-center justify-between">
-                      <Badge variant="outline">{course.enrolled} students</Badge>
+                      <Badge variant="outline">{courseEnrollmentCounts[course.id] || 0} students</Badge>
                       <div className="flex items-center gap-1 text-sm text-muted-foreground">
                         <Star className="h-3 w-3" />
                         <span>{course.rating}</span>

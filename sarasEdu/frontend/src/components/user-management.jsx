@@ -99,14 +99,25 @@ export function UserManagement({ userType, onSelectStudent }) {
     async function fetchUsers() {
       setLoading(true);
       try {
+        // Fetch all courses first
+        let coursesMap = {};
+        try {
+          const coursesRes = await api.request('/courses/');
+          const courses = (coursesRes.results || coursesRes || []);
+          coursesMap = courses.reduce((acc, course) => {
+            acc[course.id] = course.title || course.name || 'Unknown Course';
+            return acc;
+          }, {});
+        } catch (err) {
+          console.warn('Failed to fetch courses:', err);
+        }
+
         // Fetch student profiles with related user data
         const studentsRes = await api.request('/student-profiles/');
         const students = (studentsRes.results || studentsRes || []).map(s => {
-          // The user data might be nested or at the top level depending on serializer
           const user = s.user || s;
           return {
             id: s.id || user.id,
-            // User fields from core_user table - access from nested user object OR top level
             username: user.username || s.username,
             firstName: user.first_name || s.first_name,
             lastName: user.last_name || s.last_name,
@@ -116,7 +127,6 @@ export function UserManagement({ userType, onSelectStudent }) {
             avatarUrl: user.avatar_url || s.avatar_url,
             dateJoined: user.date_joined || s.date_joined,
             lastLogin: user.last_login || s.last_login,
-            // Student profile fields
             rollNumber: s.roll_number,
             gradeLevel: s.grade_level,
             dateOfBirth: s.date_of_birth,
@@ -125,7 +135,6 @@ export function UserManagement({ userType, onSelectStudent }) {
             emergencyContact: s.emergency_contact,
             averageGrade: parseFloat(s.average_grade) || 0,
             createdAt: s.created_at,
-            // Placeholder for enrollments and attendance
             totalCourses: 0,
             coursesEnrolled: [],
             attendance: 0,
@@ -136,11 +145,10 @@ export function UserManagement({ userType, onSelectStudent }) {
         // Fetch teacher profiles with related user data
         const teachersRes = await api.request('/teacher-profiles/');
         const teachers = (teachersRes.results || teachersRes || []).map(t => {
-          // The user data might be nested or at the top level depending on serializer
           const user = t.user || t;
           return {
             id: t.id || user.id,
-            // User fields from core_user table - access from nested user object OR top level
+            userId: typeof user === 'object' ? user.id : user,
             username: user.username || t.username,
             firstName: user.first_name || t.first_name,
             lastName: user.last_name || t.last_name,
@@ -150,7 +158,6 @@ export function UserManagement({ userType, onSelectStudent }) {
             avatarUrl: user.avatar_url || t.avatar_url,
             dateJoined: user.date_joined || t.date_joined,
             lastLogin: user.last_login || t.last_login,
-            // Teacher profile fields
             employeeId: t.employee_id,
             department: t.department,
             qualification: t.qualification,
@@ -159,7 +166,6 @@ export function UserManagement({ userType, onSelectStudent }) {
             officeHours: t.office_hours,
             averageRating: parseFloat(t.average_rating) || 0,
             createdAt: t.created_at,
-            // Placeholder for courses
             totalStudents: 0,
             coursesTeaching: [],
             status: 'active',
@@ -176,7 +182,7 @@ export function UserManagement({ userType, onSelectStudent }) {
             student.coursesEnrolled = studentEnrollments.map(e => ({
               id: e.id,
               courseId: e.course,
-              courseName: e.course_title || 'Unknown Course',
+              courseName: coursesMap[e.course] || 'Unknown Course',
               status: e.status,
               progressPercentage: e.progress_percentage,
               enrollmentDate: e.enrollment_date,
@@ -184,6 +190,26 @@ export function UserManagement({ userType, onSelectStudent }) {
           });
         } catch (err) {
           console.warn('Failed to fetch enrollments:', err);
+        }
+
+        // Fetch courses for each teacher
+        try {
+          const coursesRes = await api.request('/courses/');
+          const allCourses = (coursesRes.results || coursesRes || []);
+          teachers.forEach(teacher => {
+            const teacherCourses = allCourses.filter(c => {
+              const instructorId = typeof c.instructor === 'object' ? c.instructor.id : c.instructor;
+              const createdById = typeof c.created_by === 'object' ? c.created_by.id : c.created_by;
+              return instructorId === teacher.userId || createdById === teacher.userId || instructorId === teacher.id || createdById === teacher.id;
+            });
+            teacher.coursesTeaching = teacherCourses.map(c => ({
+              id: c.id,
+              courseId: c.id,
+              courseName: c.title || c.name || 'Unknown Course',
+            }));
+          });
+        } catch (err) {
+          console.warn('Failed to fetch teacher courses:', err);
         }
 
         // Fetch attendance records for each student
@@ -464,6 +490,7 @@ export function UserManagement({ userType, onSelectStudent }) {
         const user = t.user || t;
         return {
           id: t.id || user.id,
+          userId: typeof user === 'object' ? user.id : user,
           username: user.username || t.username,
           firstName: user.first_name || t.first_name,
           lastName: user.last_name || t.last_name,
@@ -504,6 +531,25 @@ export function UserManagement({ userType, onSelectStudent }) {
         });
       } catch (err) {
         console.warn('Failed to fetch enrollments:', err);
+      }
+
+      try {
+        const coursesRes = await api.request('/courses/');
+        const allCourses = (coursesRes.results || coursesRes || []);
+        teachers.forEach(teacher => {
+          const teacherCourses = allCourses.filter(c => {
+            const instructorId = typeof c.instructor === 'object' ? c.instructor.id : c.instructor;
+            const createdById = typeof c.created_by === 'object' ? c.created_by.id : c.created_by;
+            return instructorId === teacher.userId || createdById === teacher.userId || instructorId === teacher.id || createdById === teacher.id;
+          });
+          teacher.coursesTeaching = teacherCourses.map(c => ({
+            id: c.id,
+            courseId: c.id,
+            courseName: c.title || c.name || 'Unknown Course',
+          }));
+        });
+      } catch (err) {
+        console.warn('Failed to fetch teacher courses:', err);
       }
 
       try {
@@ -1194,7 +1240,7 @@ export function UserManagement({ userType, onSelectStudent }) {
                   <div>
                     <p className="text-sm text-muted-foreground">Total Students</p>
                     <p className="text-2xl font-bold">{studentsData.length}</p>
-                    <p className="text-xs text-green-600">{studentsJoinedThisMonth} joined this month</p>
+                    {!isTeacher && <p className="text-xs text-green-600">{studentsJoinedThisMonth} joined this month</p>}
                   </div>
                 </div>
               </CardContent>
@@ -1222,29 +1268,49 @@ export function UserManagement({ userType, onSelectStudent }) {
                     <UserCheck className="h-5 w-5 text-emerald-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Active Users</p>
-                    <p className="text-2xl font-bold">{activeUsers}</p>
-                    <p className="text-xs text-green-600">{activeRate}% active rate</p>
+                    <p className="text-sm text-muted-foreground">{isTeacher ? 'Active' : 'Active'} Users</p>
+                    <p className="text-2xl font-bold">{isTeacher ? studentsData.filter(s => s.status === 'active').length : activeUsers}</p>
+                    {!isTeacher && <p className="text-xs text-green-600">{activeRate}% active rate</p>}
                   </div>
                 </div>
               </CardContent>
             </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
-                    <BookOpen className="h-5 w-5 text-purple-600" />
+            {!isTeacher && (
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
+                      <BookOpen className="h-5 w-5 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Total Enrollments</p>
+                      <p className="text-2xl font-bold">
+                        {studentsData.reduce((sum, s) => sum + (typeof s.totalCourses === 'number' ? s.totalCourses : 0), 0)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Course enrollments</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Total Enrollments</p>
-                    <p className="text-2xl font-bold">
-                      {studentsData.reduce((sum, s) => sum + (typeof s.totalCourses === 'number' ? s.totalCourses : 0), 0)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Course enrollments</p>
+                </CardContent>
+              </Card>
+            )}
+            {isTeacher && (
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
+                      <BookOpen className="h-5 w-5 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Total Enrollments</p>
+                      <p className="text-2xl font-bold">
+                        {studentsData.reduce((sum, s) => sum + (typeof s.totalCourses === 'number' ? s.totalCourses : 0), 0)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Student enrollments</p>
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            )}
           </div>
           <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
             <div className="flex items-center justify-between">
