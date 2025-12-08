@@ -538,8 +538,8 @@ export function OptimizedLMSDashboard() {
             <Route path="attendance" element={renderLazyRoute(AttendanceManagement, { userRole })} />
             <Route path="games" element={renderLazyRoute(GamesHub)} />
             <Route path="analytics" element={renderLazyRoute(AnalyticsDashboard, { userRole, userId })} />
-            <Route path="students" element={renderLazyRoute(UserManagement, { userType: 'student', onSelectStudent: setSelectedStudent })} />
-            <Route path="user-management" element={renderLazyRoute(UserManagement, { userType: 'all' })} />
+            <Route path="students" element={renderLazyRoute(UserManagement, { userType: userRole === 'teacher' ? 'teacher' : 'student', onSelectStudent: setSelectedStudent, currentUser: user })} />
+            <Route path="user-management" element={renderLazyRoute(UserManagement, { userType: 'all', currentUser: user })} />
             <Route path="announcements" element={renderLazyRoute(AnnouncementsSystem, { userRole })} />
             <Route path="profile" element={renderLazyRoute(UserProfile, { userRole, userId, userName })} />
             <Route path="settings" element={renderLazyRoute(SettingsPanel, { userRole })} />

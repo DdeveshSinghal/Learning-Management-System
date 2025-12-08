@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 
 // All user data is fetched from backend API. No sample data is shown.
-export function UserManagement({ userType, onSelectStudent }) {
+export function UserManagement({ userType, onSelectStudent, currentUser }) {
 
   const [activeTab, setActiveTab] = useState('students');
   const [searchQuery, setSearchQuery] = useState('');
@@ -196,17 +196,33 @@ export function UserManagement({ userType, onSelectStudent }) {
         try {
           const coursesRes = await api.request('/courses/');
           const allCourses = (coursesRes.results || coursesRes || []);
+          
+          // Fetch all enrollments to count students per teacher's courses
+          const enrollmentsRes = await api.request('/enrollments/');
+          const allEnrollments = enrollmentsRes.results || enrollmentsRes || [];
+          
           teachers.forEach(teacher => {
             const teacherCourses = allCourses.filter(c => {
               const instructorId = typeof c.instructor === 'object' ? c.instructor.id : c.instructor;
               const createdById = typeof c.created_by === 'object' ? c.created_by.id : c.created_by;
               return instructorId === teacher.userId || createdById === teacher.userId || instructorId === teacher.id || createdById === teacher.id;
             });
+            
             teacher.coursesTeaching = teacherCourses.map(c => ({
               id: c.id,
               courseId: c.id,
               courseName: c.title || c.name || 'Unknown Course',
             }));
+            
+            // Count unique students enrolled in this teacher's courses
+            const teacherCourseIds = teacherCourses.map(c => c.id);
+            const studentSet = new Set();
+            allEnrollments.forEach(enrollment => {
+              if (teacherCourseIds.includes(enrollment.course)) {
+                studentSet.add(enrollment.student);
+              }
+            });
+            teacher.totalStudents = studentSet.size;
           });
         } catch (err) {
           console.warn('Failed to fetch teacher courses:', err);
@@ -227,7 +243,41 @@ export function UserManagement({ userType, onSelectStudent }) {
           console.warn('Failed to fetch attendance:', err);
         }
 
-        setStudentsData(students);
+        // If teacher, filter students to only those enrolled in their courses
+        if (isTeacher && currentUser) {
+          try {
+            const coursesRes = await api.request('/courses/');
+            const allCourses = (coursesRes.results || coursesRes || []);
+            const enrollmentsRes = await api.request('/enrollments/');
+            const allEnrollments = enrollmentsRes.results || enrollmentsRes || [];
+            
+            // Find teacher's courses
+            const teacherCourses = allCourses.filter(c => {
+              const instructorId = typeof c.instructor === 'object' ? c.instructor.id : c.instructor;
+              const createdById = typeof c.created_by === 'object' ? c.created_by.id : c.created_by;
+              return instructorId === currentUser.id || createdById === currentUser.id;
+            });
+            
+            const teacherCourseIds = teacherCourses.map(c => c.id);
+            
+            // Get unique student IDs enrolled in teacher's courses
+            const enrolledStudentIds = new Set(
+              allEnrollments
+                .filter(e => teacherCourseIds.includes(e.course))
+                .map(e => e.student)
+            );
+            
+            // Filter students to only those enrolled in teacher's courses
+            const filteredStudents = students.filter(s => enrolledStudentIds.has(s.id));
+            setStudentsData(filteredStudents);
+          } catch (err) {
+            console.warn('Failed to filter students for teacher:', err);
+            setStudentsData(students);
+          }
+        } else {
+          setStudentsData(students);
+        }
+        
         setTeachersData(teachers);
       } catch (err) {
         console.error('Error fetching users:', err);
@@ -235,7 +285,7 @@ export function UserManagement({ userType, onSelectStudent }) {
       setLoading(false);
     }
     fetchUsers();
-  }, []);
+  }, [isTeacher, currentUser]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -536,6 +586,11 @@ export function UserManagement({ userType, onSelectStudent }) {
       try {
         const coursesRes = await api.request('/courses/');
         const allCourses = (coursesRes.results || coursesRes || []);
+        
+        // Fetch all enrollments to count students per teacher's courses
+        const enrollmentsRes = await api.request('/enrollments/');
+        const allEnrollments = enrollmentsRes.results || enrollmentsRes || [];
+        
         teachers.forEach(teacher => {
           const teacherCourses = allCourses.filter(c => {
             const instructorId = typeof c.instructor === 'object' ? c.instructor.id : c.instructor;
@@ -547,6 +602,16 @@ export function UserManagement({ userType, onSelectStudent }) {
             courseId: c.id,
             courseName: c.title || c.name || 'Unknown Course',
           }));
+          
+          // Count unique students enrolled in this teacher's courses
+          const teacherCourseIds = teacherCourses.map(c => c.id);
+          const studentSet = new Set();
+          allEnrollments.forEach(enrollment => {
+            if (teacherCourseIds.includes(enrollment.course)) {
+              studentSet.add(enrollment.student);
+            }
+          });
+          teacher.totalStudents = studentSet.size;
         });
       } catch (err) {
         console.warn('Failed to fetch teacher courses:', err);
@@ -566,7 +631,41 @@ export function UserManagement({ userType, onSelectStudent }) {
         console.warn('Failed to fetch attendance:', err);
       }
 
-      setStudentsData(students);
+      // If teacher, filter students to only those enrolled in their courses
+      if (isTeacher && currentUser) {
+        try {
+          const coursesRes = await api.request('/courses/');
+          const allCourses = (coursesRes.results || coursesRes || []);
+          const enrollmentsRes = await api.request('/enrollments/');
+          const allEnrollments = enrollmentsRes.results || enrollmentsRes || [];
+          
+          // Find teacher's courses
+          const teacherCourses = allCourses.filter(c => {
+            const instructorId = typeof c.instructor === 'object' ? c.instructor.id : c.instructor;
+            const createdById = typeof c.created_by === 'object' ? c.created_by.id : c.created_by;
+            return instructorId === currentUser.id || createdById === currentUser.id;
+          });
+          
+          const teacherCourseIds = teacherCourses.map(c => c.id);
+          
+          // Get unique student IDs enrolled in teacher's courses
+          const enrolledStudentIds = new Set(
+            allEnrollments
+              .filter(e => teacherCourseIds.includes(e.course))
+              .map(e => e.student)
+          );
+          
+          // Filter students to only those enrolled in teacher's courses
+          const filteredStudents = students.filter(s => enrolledStudentIds.has(s.id));
+          setStudentsData(filteredStudents);
+        } catch (err) {
+          console.warn('Failed to filter students for teacher:', err);
+          setStudentsData(students);
+        }
+      } else {
+        setStudentsData(students);
+      }
+      
       setTeachersData(teachers);
     } catch (err) {
       console.error('Error refreshing users:', err);
@@ -1108,7 +1207,8 @@ export function UserManagement({ userType, onSelectStudent }) {
               </>
             )}
             
-            {!isTeacher && (
+            {/* Teachers can edit students but not delete; admins can do both */}
+            {(!isTeacher || type === 'student') && (
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => {
                   setSelectedUser(null);
@@ -1117,12 +1217,14 @@ export function UserManagement({ userType, onSelectStudent }) {
                   <Edit className="h-4 w-4 mr-2" />
                   Edit
                 </Button>
-                <Button variant="destructive" onClick={() => {
-                  handleRemoveUser(selectedUser, type);
-                }}>
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Remove
-                </Button>
+                {!isTeacher && (
+                  <Button variant="destructive" onClick={() => {
+                    handleRemoveUser(selectedUser, type);
+                  }}>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Remove
+                  </Button>
+                )}
               </div>
             )}
           </div>
@@ -1177,16 +1279,19 @@ export function UserManagement({ userType, onSelectStudent }) {
                   <Eye className="h-3 w-3 mr-1" />
                   <span className="hidden sm:inline">View</span>
                 </Button>
-                {!isTeacher && (
+                {/* Teachers can edit students but not delete them or manage teachers */}
+                {(!isTeacher || type === 'student') && (
                   <>
                     <Button size="sm" variant="outline" className="flex-1 sm:flex-none text-xs sm:text-sm h-8 sm:h-9" onClick={() => openEditDialog(user, type)}>
                       <Edit className="h-3 w-3 mr-1" />
                       <span className="hidden sm:inline">Edit</span>
                     </Button>
-                    <Button size="sm" variant="destructive" className="flex-1 sm:flex-none text-xs sm:text-sm h-8 sm:h-9" onClick={() => handleRemoveUser(user, type)}>
-                      <Trash2 className="h-3 w-3 mr-1" />
-                      <span className="hidden sm:inline">Remove</span>
-                    </Button>
+                    {!isTeacher && (
+                      <Button size="sm" variant="destructive" className="flex-1 sm:flex-none text-xs sm:text-sm h-8 sm:h-9" onClick={() => handleRemoveUser(user, type)}>
+                        <Trash2 className="h-3 w-3 mr-1" />
+                        <span className="hidden sm:inline">Remove</span>
+                      </Button>
+                    )}
                   </>
                 )}
               </div>
