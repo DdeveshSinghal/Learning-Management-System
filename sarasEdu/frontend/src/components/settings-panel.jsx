@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -8,6 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Separator } from './ui/separator';
 import { Badge } from './ui/badge';
+import { toast } from 'sonner';
+import { getUserSettings, updateUserSettings, me, updateUserProfile } from '../services/api';
+import { useTranslation } from '../services/translations';
+import { useTheme } from '../contexts/ThemeContext';
 import { 
   User,
   Bell,
@@ -34,6 +38,12 @@ import {
 
 // Props/types removed for JS build. Settings should be fetched from API/backend.
 export function SettingsPanel({ userRole, userId, userName }) {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [initialSettings, setInitialSettings] = useState(null);
+  const [currentLanguage, setCurrentLanguage] = useState('en');
+  const { setTheme } = useTheme();
+  const t = useTranslation(currentLanguage);
   const [settings, setSettings] = useState({
     profile: {
       name: userName || '',
@@ -45,8 +55,7 @@ export function SettingsPanel({ userRole, userId, userName }) {
     appearance: {
       theme: 'light',
       language: 'en',
-      timezone: 'UTC-5',
-      dashboardView: 'default'
+      timezone: 'IST'
     },
     notifications: {
       email: true,
@@ -87,6 +96,101 @@ export function SettingsPanel({ userRole, userId, userName }) {
     }
   });
 
+  // Fetch settings on mount
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        setLoading(true);
+        
+        // Fetch user profile
+        const userProfile = await me();
+        
+        // Fetch user settings (may not exist yet)
+        let userSettings = {};
+        try {
+          userSettings = await getUserSettings();
+        } catch (settingsError) {
+          // Settings don't exist yet - will use defaults
+          console.warn('User settings not found, using defaults:', settingsError);
+          userSettings = {};
+        }
+        
+        // Map backend data to frontend state
+        const lang = userSettings.language || 'en';
+        const themeValue = userSettings.theme || 'light';
+        setCurrentLanguage(lang);
+        setTheme(themeValue);
+        
+        const mappedSettings = {
+          profile: {
+            name: userProfile.first_name && userProfile.last_name 
+              ? `${userProfile.first_name} ${userProfile.last_name}` 
+              : userProfile.username || '',
+            email: userProfile.email || '',
+            phone: userProfile.phone || '',
+            bio: userProfile.bio || '',
+            avatar: userProfile.avatar_url || null
+          },
+          appearance: {
+            theme: userSettings.theme || 'light',
+            language: lang,
+            timezone: userSettings.timezone || 'UTC-5',
+            dashboardView: userSettings.dashboard_view || 'default'
+          },
+          notifications: {
+            email: userSettings.email_notifications ?? true,
+            inApp: userSettings.inapp_notifications ?? true,
+            sms: userSettings.sms_notifications ?? false,
+            assignments: userSettings.notify_assignments ?? true,
+            grades: userSettings.notify_grades ?? true,
+            announcements: userSettings.notify_announcements ?? true,
+            reminders: userSettings.notify_reminders ?? true,
+            discussionReplies: userSettings.notify_discussion_replies ?? false,
+            studentSubmissions: userSettings.notify_student_submissions ?? false
+          },
+          privacy: {
+            profileVisibility: userSettings.profile_visibility || 'public',
+            emailVisible: userSettings.email_visible ?? false,
+            phoneVisible: userSettings.phone_visible ?? false,
+            allowMessaging: userSettings.allow_messaging ?? true,
+            twoFactorAuth: userSettings.two_factor_auth ?? false
+          },
+          course: {
+            autoEnrollment: userSettings.auto_enrollment ?? false,
+            deadlineReminders: userSettings.deadline_reminders ?? true,
+            lateSubmissionWarning: userSettings.late_submission_warning ?? true
+          },
+          teaching: {
+            defaultGradingScheme: userSettings.default_grading_scheme || 'percentage',
+            lateSubmissionPolicy: userSettings.late_submission_policy || 'partial_credit',
+            courseVisibility: userSettings.course_visibility || 'public',
+            plagiarismCheck: userSettings.plagiarism_check ?? true,
+            studentMessaging: userSettings.student_messaging ?? true
+          },
+          admin: {
+            userRegistration: userSettings.user_registration ?? true,
+            courseApproval: userSettings.course_approval ?? false,
+            systemMaintenance: userSettings.system_maintenance ?? false,
+            backupFrequency: userSettings.backup_frequency || 'daily',
+            passwordPolicy: userSettings.password_policy || 'strong'
+          }
+        };
+
+        setSettings(mappedSettings);
+        setInitialSettings(mappedSettings);
+        
+        toast.success('Settings loaded successfully');
+      } catch (error) {
+        console.error('Error fetching settings:', error);
+        toast.error('Failed to load user profile. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSettings();
+  }, []);
+
   const updateSettings = (section, key, value) => {
     setSettings(prev => ({
       ...prev,
@@ -95,6 +199,82 @@ export function SettingsPanel({ userRole, userId, userName }) {
         [key]: value
       }
     }));
+    // Update language globally when it changes
+    if (section === 'appearance' && key === 'language') {
+      setCurrentLanguage(value);
+    }
+    // Update theme globally when it changes
+    if (section === 'appearance' && key === 'theme') {
+      setTheme(value);
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    // Skip saving if nothing changed
+    if (initialSettings && JSON.stringify(settings) === JSON.stringify(initialSettings)) {
+      toast.info('No changes to save');
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      // Update user profile (name, email, phone, bio)
+      const [firstName, ...lastNameParts] = settings.profile.name.split(' ');
+      const lastName = lastNameParts.join(' ');
+      
+      await updateUserProfile(userId, {
+        first_name: firstName,
+        last_name: lastName,
+        email: settings.profile.email,
+        phone: settings.profile.phone,
+        bio: settings.profile.bio
+      });
+
+      // Update user settings (all other settings)
+      await updateUserSettings({
+        theme: settings.appearance.theme,
+        language: settings.appearance.language,
+        timezone: settings.appearance.timezone,
+        email_notifications: settings.notifications.email,
+        inapp_notifications: settings.notifications.inApp,
+        sms_notifications: settings.notifications.sms,
+        notify_assignments: settings.notifications.assignments,
+        notify_grades: settings.notifications.grades,
+        notify_announcements: settings.notifications.announcements,
+        notify_reminders: settings.notifications.reminders,
+        notify_discussion_replies: settings.notifications.discussionReplies,
+        notify_student_submissions: settings.notifications.studentSubmissions,
+        profile_visibility: settings.privacy.profileVisibility,
+        email_visible: settings.privacy.emailVisible,
+        phone_visible: settings.privacy.phoneVisible,
+        allow_messaging: settings.privacy.allowMessaging,
+        two_factor_auth: settings.privacy.twoFactorAuth,
+        auto_enrollment: settings.course.autoEnrollment,
+        deadline_reminders: settings.course.deadlineReminders,
+        late_submission_warning: settings.course.lateSubmissionWarning,
+        default_grading_scheme: settings.teaching.defaultGradingScheme,
+        late_submission_policy: settings.teaching.lateSubmissionPolicy,
+        course_visibility: settings.teaching.courseVisibility,
+        plagiarism_check: settings.teaching.plagiarismCheck,
+        student_messaging: settings.teaching.studentMessaging,
+        user_registration: settings.admin.userRegistration,
+        course_approval: settings.admin.courseApproval,
+        system_maintenance: settings.admin.systemMaintenance,
+        backup_frequency: settings.admin.backupFrequency,
+        password_policy: settings.admin.passwordPolicy
+      });
+
+      toast.success('Settings saved successfully');
+      setInitialSettings(settings);
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      const errorMessage = error.data ? JSON.stringify(error.data) : error.message;
+      console.error('Detailed error:', errorMessage);
+      toast.error(`Failed to save settings: ${errorMessage}`);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const ProfileSettings = () => (
@@ -103,8 +283,8 @@ export function SettingsPanel({ userRole, userId, userName }) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
-            Profile Information
-          </CardTitle>
+            {t.profileInformation}
+          </CardTitle> 
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center gap-4">
@@ -112,16 +292,16 @@ export function SettingsPanel({ userRole, userId, userName }) {
               <User className="h-8 w-8 text-gray-500" />
             </div>
             <div className="flex-1">
-              <Button variant="outline">Change Avatar</Button>
+              <Button variant="outline">{t.changeAvatar}</Button>
               <p className="text-sm text-muted-foreground mt-1">
-                JPG, GIF or PNG. Max size 2MB.
+                {t.avatarHint}
               </p>
             </div>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="name">Full Name</Label>
+              <Label htmlFor="name">{t.fullName}</Label>
               <Input 
                 id="name"
                 value={settings.profile.name}
@@ -129,7 +309,7 @@ export function SettingsPanel({ userRole, userId, userName }) {
               />
             </div>
             <div>
-              <Label htmlFor="email">Email Address</Label>
+              <Label htmlFor="email">{t.emailAddress}</Label>
               <Input 
                 id="email"
                 type="email"
@@ -138,7 +318,7 @@ export function SettingsPanel({ userRole, userId, userName }) {
               />
             </div>
             <div>
-              <Label htmlFor="phone">Phone Number</Label>
+              <Label htmlFor="phone">{t.phoneNumber}</Label>
               <Input 
                 id="phone"
                 value={settings.profile.phone}
@@ -146,7 +326,7 @@ export function SettingsPanel({ userRole, userId, userName }) {
               />
             </div>
             <div>
-              <Label htmlFor="bio">Bio</Label>
+              <Label htmlFor="bio">{t.bio}</Label>
               <Input 
                 id="bio"
                 value={settings.profile.bio}
@@ -165,14 +345,14 @@ export function SettingsPanel({ userRole, userId, userName }) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Palette className="h-5 w-5" />
-            Appearance & Display
+            {t.appearanceDisplay}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="flex items-center justify-between">
             <div>
-              <Label>Theme</Label>
-              <p className="text-sm text-muted-foreground">Choose your preferred theme</p>
+              <Label>{t.theme}</Label>
+              <p className="text-sm text-muted-foreground">{t.chooseTheme}</p>
             </div>
             <div className="flex gap-2">
               <Button 
@@ -181,7 +361,7 @@ export function SettingsPanel({ userRole, userId, userName }) {
                 onClick={() => updateSettings('appearance', 'theme', 'light')}
               >
                 <Sun className="h-4 w-4 mr-1" />
-                Light
+                {t.light}
               </Button>
               <Button 
                 variant={settings.appearance.theme === 'dark' ? 'default' : 'outline'}
@@ -189,7 +369,7 @@ export function SettingsPanel({ userRole, userId, userName }) {
                 onClick={() => updateSettings('appearance', 'theme', 'dark')}
               >
                 <Moon className="h-4 w-4 mr-1" />
-                Dark
+                {t.dark}
               </Button>
             </div>
           </div>
@@ -198,49 +378,33 @@ export function SettingsPanel({ userRole, userId, userName }) {
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="language">Language</Label>
+              <Label htmlFor="language">{t.language}</Label>
               <Select value={settings.appearance.language} onValueChange={(value) => updateSettings('appearance', 'language', value)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="en">English</SelectItem>
-                  <SelectItem value="es">Spanish</SelectItem>
-                  <SelectItem value="fr">French</SelectItem>
-                  <SelectItem value="de">German</SelectItem>
+                  <SelectItem value="en">{t.english}</SelectItem>
+                  <SelectItem value="hi">{t.hindi}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             
             <div>
-              <Label htmlFor="timezone">Timezone</Label>
+              <Label htmlFor="timezone">{t.timezone}</Label>
               <Select value={settings.appearance.timezone} onValueChange={(value) => updateSettings('appearance', 'timezone', value)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="UTC-8">Pacific Time (UTC-8)</SelectItem>
-                  <SelectItem value="UTC-7">Mountain Time (UTC-7)</SelectItem>
-                  <SelectItem value="UTC-6">Central Time (UTC-6)</SelectItem>
-                  <SelectItem value="UTC-5">Eastern Time (UTC-5)</SelectItem>
+                  <SelectItem value="IST">IST (UTC+05:30) - Official timezone of India</SelectItem>
+                  <SelectItem value="Asia/Kolkata">Asia/Kolkata (UTC+05:30) - Tech, servers, programming</SelectItem>
+                  <SelectItem value="Asia/Calcutta">Asia/Calcutta (UTC+05:30) - Deprecated but same as Asia/Kolkata</SelectItem>
+                  <SelectItem value="UTC">UTC (UTC±00:00) - Global standard</SelectItem>
+                  <SelectItem value="GMT">GMT (UTC±00:00) - Reference timezone</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-          </div>
-          
-          <div>
-            <Label htmlFor="dashboardView">Default Dashboard View</Label>
-            <Select value={settings.appearance.dashboardView} onValueChange={(value) => updateSettings('appearance', 'dashboardView', value)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="default">Default</SelectItem>
-                <SelectItem value="courses">Courses</SelectItem>
-                <SelectItem value="calendar">Calendar</SelectItem>
-                <SelectItem value="analytics">Analytics</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </CardContent>
       </Card>
@@ -253,39 +417,37 @@ export function SettingsPanel({ userRole, userId, userName }) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Bell className="h-5 w-5" />
-            Notification Preferences
+            {t.notificationPreferences}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
           <div>
-            <h4 className="font-semibold mb-4">Delivery Methods</h4>
+            <h4 className="font-semibold mb-4">{t.deliveryMethods}</h4>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <Label>Email Notifications</Label>
-                  <p className="text-sm text-muted-foreground">Receive notifications via email</p>
+                  <Label>{t.emailNotifications}</Label>
+                  <p className="text-sm text-muted-foreground">{t.emailNotificationsDesc}</p>
                 </div>
                 <Switch 
                   checked={settings.notifications.email}
                   onCheckedChange={(value) => updateSettings('notifications', 'email', value)}
                 />
               </div>
-              
               <div className="flex items-center justify-between">
                 <div>
-                  <Label>In-App Notifications</Label>
-                  <p className="text-sm text-muted-foreground">Show notifications in the application</p>
+                  <Label>{t.inAppNotifications}</Label>
+                  <p className="text-sm text-muted-foreground">{t.inAppNotificationsDesc}</p>
                 </div>
                 <Switch 
                   checked={settings.notifications.inApp}
                   onCheckedChange={(value) => updateSettings('notifications', 'inApp', value)}
                 />
               </div>
-              
               <div className="flex items-center justify-between">
                 <div>
-                  <Label>SMS Notifications</Label>
-                  <p className="text-sm text-muted-foreground">Receive important alerts via SMS</p>
+                  <Label>{t.smsNotifications}</Label>
+                  <p className="text-sm text-muted-foreground">{t.smsNotificationsDesc}</p>
                 </div>
                 <Switch 
                   checked={settings.notifications.sms}
@@ -294,63 +456,52 @@ export function SettingsPanel({ userRole, userId, userName }) {
               </div>
             </div>
           </div>
-          
           <Separator />
-          
           <div>
-            <h4 className="font-semibold mb-4">Notification Types</h4>
+            <h4 className="font-semibold mb-4">{t.notificationTypes}</h4>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <Label>Assignment Due Dates</Label>
+                <Label>{t.assignmentDueDates}</Label>
                 <Switch 
                   checked={settings.notifications.assignments}
                   onCheckedChange={(value) => updateSettings('notifications', 'assignments', value)}
                 />
               </div>
-              
               <div className="flex items-center justify-between">
-                <Label>Grade Updates</Label>
+                <Label>{t.gradeUpdates}</Label>
                 <Switch 
                   checked={settings.notifications.grades}
                   onCheckedChange={(value) => updateSettings('notifications', 'grades', value)}
                 />
               </div>
-              
               <div className="flex items-center justify-between">
-                <Label>Announcements</Label>
+                <Label>{t.announcements}</Label>
                 <Switch 
                   checked={settings.notifications.announcements}
                   onCheckedChange={(value) => updateSettings('notifications', 'announcements', value)}
                 />
               </div>
-              
               <div className="flex items-center justify-between">
-                <Label>Course Reminders</Label>
+                <Label>{t.courseReminders}</Label>
                 <Switch 
                   checked={settings.notifications.reminders}
                   onCheckedChange={(value) => updateSettings('notifications', 'reminders', value)}
                 />
               </div>
-              
-              {userRole === 'teacher' && (
-                <>
-                  <div className="flex items-center justify-between">
-                    <Label>Discussion Replies</Label>
-                    <Switch 
-                      checked={settings.notifications.discussionReplies}
-                      onCheckedChange={(value) => updateSettings('notifications', 'discussionReplies', value)}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <Label>Student Submissions</Label>
-                    <Switch 
-                      checked={settings.notifications.studentSubmissions}
-                      onCheckedChange={(value) => updateSettings('notifications', 'studentSubmissions', value)}
-                    />
-                  </div>
-                </>
-              )}
+              <div className="flex items-center justify-between">
+                <Label>{t.discussionReplies}</Label>
+                <Switch 
+                  checked={settings.notifications.discussionReplies}
+                  onCheckedChange={(value) => updateSettings('notifications', 'discussionReplies', value)}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <Label>{t.studentSubmissions}</Label>
+                <Switch 
+                  checked={settings.notifications.studentSubmissions}
+                  onCheckedChange={(value) => updateSettings('notifications', 'studentSubmissions', value)}
+                />
+              </div>
             </div>
           </div>
         </CardContent>
@@ -364,30 +515,30 @@ export function SettingsPanel({ userRole, userId, userName }) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Shield className="h-5 w-5" />
-            Privacy & Security
+            {t.privacySecurity}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
           <div>
-            <h4 className="font-semibold mb-4">Privacy Settings</h4>
+            <h4 className="font-semibold mb-4">{t.privacySettings}</h4>
             <div className="space-y-4">
               <div>
-                <Label>Profile Visibility</Label>
+                <Label>{t.profileVisibility}</Label>
                 <Select value={settings.privacy.profileVisibility} onValueChange={(value) => updateSettings('privacy', 'profileVisibility', value)}>
                   <SelectTrigger className="mt-1">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="public">Public</SelectItem>
-                    <SelectItem value="students">Students Only</SelectItem>
-                    <SelectItem value="teachers">Teachers Only</SelectItem>
-                    <SelectItem value="private">Private</SelectItem>
+                    <SelectItem value="public">{t.public}</SelectItem>
+                    <SelectItem value="students">{t.studentsOnly}</SelectItem>
+                    <SelectItem value="teachers">{t.teachersOnly}</SelectItem>
+                    <SelectItem value="private">{t.private}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               
               <div className="flex items-center justify-between">
-                <Label>Show Email Address</Label>
+                <Label>{t.showEmailAddress}</Label>
                 <Switch 
                   checked={settings.privacy.emailVisible}
                   onCheckedChange={(value) => updateSettings('privacy', 'emailVisible', value)}
@@ -395,7 +546,7 @@ export function SettingsPanel({ userRole, userId, userName }) {
               </div>
               
               <div className="flex items-center justify-between">
-                <Label>Show Phone Number</Label>
+                <Label>{t.showPhoneNumber}</Label>
                 <Switch 
                   checked={settings.privacy.phoneVisible}
                   onCheckedChange={(value) => updateSettings('privacy', 'phoneVisible', value)}
@@ -403,7 +554,7 @@ export function SettingsPanel({ userRole, userId, userName }) {
               </div>
               
               <div className="flex items-center justify-between">
-                <Label>Allow Direct Messages</Label>
+                <Label>{t.allowDirectMessages}</Label>
                 <Switch 
                   checked={settings.privacy.allowMessaging}
                   onCheckedChange={(value) => updateSettings('privacy', 'allowMessaging', value)}
@@ -415,12 +566,12 @@ export function SettingsPanel({ userRole, userId, userName }) {
           <Separator />
           
           <div>
-            <h4 className="font-semibold mb-4">Security Settings</h4>
+            <h4 className="font-semibold mb-4">{t.securitySettings}</h4>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <Label>Two-Factor Authentication</Label>
-                  <p className="text-sm text-muted-foreground">Add an extra layer of security</p>
+                  <Label>{t.twoFactorAuth}</Label>
+                  <p className="text-sm text-muted-foreground">{t.twoFactorAuthDesc}</p>
                 </div>
                 <Switch 
                   checked={settings.privacy.twoFactorAuth}
@@ -431,14 +582,14 @@ export function SettingsPanel({ userRole, userId, userName }) {
               <div>
                 <Button variant="outline">
                   <Lock className="h-4 w-4 mr-2" />
-                  Change Password
+                  {t.changePassword}
                 </Button>
               </div>
               
               <div>
                 <Button variant="outline">
                   <Smartphone className="h-4 w-4 mr-2" />
-                  Manage Connected Devices
+                  {t.manageConnectedDevices}
                 </Button>
               </div>
             </div>
@@ -457,7 +608,7 @@ export function SettingsPanel({ userRole, userId, userName }) {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BookOpen className="h-5 w-5" />
-              {userRole === 'student' ? 'Course Preferences' : 'Teaching Preferences'}
+              {userRole === 'student' ? t.coursePreferences : t.teachingPreferences}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -465,8 +616,8 @@ export function SettingsPanel({ userRole, userId, userName }) {
               <>
                 <div className="flex items-center justify-between">
                   <div>
-                    <Label>Auto-Enrollment Confirmation</Label>
-                    <p className="text-sm text-muted-foreground">Require confirmation before enrolling</p>
+                    <Label>{t.autoEnrollmentConfirmation}</Label>
+                    <p className="text-sm text-muted-foreground">{t.autoEnrollmentDesc}</p>
                   </div>
                   <Switch 
                     checked={settings.course.autoEnrollment}
@@ -475,7 +626,7 @@ export function SettingsPanel({ userRole, userId, userName }) {
                 </div>
                 
                 <div className="flex items-center justify-between">
-                  <Label>Deadline Reminders</Label>
+                  <Label>{t.deadlineReminders}</Label>
                   <Switch 
                     checked={settings.course.deadlineReminders}
                     onCheckedChange={(value) => updateSettings('course', 'deadlineReminders', value)}
@@ -483,7 +634,7 @@ export function SettingsPanel({ userRole, userId, userName }) {
                 </div>
                 
                 <div className="flex items-center justify-between">
-                  <Label>Late Submission Warnings</Label>
+                  <Label>{t.lateSubmissionWarnings}</Label>
                   <Switch 
                     checked={settings.course.lateSubmissionWarning}
                     onCheckedChange={(value) => updateSettings('course', 'lateSubmissionWarning', value)}
@@ -493,49 +644,49 @@ export function SettingsPanel({ userRole, userId, userName }) {
             ) : (
               <>
                 <div>
-                  <Label>Default Grading Scheme</Label>
+                  <Label>{t.defaultGradingScheme}</Label>
                   <Select value={settings.teaching.defaultGradingScheme} onValueChange={(value) => updateSettings('teaching', 'defaultGradingScheme', value)}>
                     <SelectTrigger className="mt-1">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="percentage">Percentage (0-100)</SelectItem>
-                      <SelectItem value="letter">Letter Grade (A-F)</SelectItem>
-                      <SelectItem value="points">Points Based</SelectItem>
+                      <SelectItem value="percentage">{t.percentage}</SelectItem>
+                      <SelectItem value="letter">{t.letterGrade}</SelectItem>
+                      <SelectItem value="points">{t.pointsBased}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 
                 <div>
-                  <Label>Late Submission Policy</Label>
+                  <Label>{t.lateSubmissionPolicy}</Label>
                   <Select value={settings.teaching.lateSubmissionPolicy} onValueChange={(value) => updateSettings('teaching', 'lateSubmissionPolicy', value)}>
                     <SelectTrigger className="mt-1">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="no_penalty">No Penalty</SelectItem>
-                      <SelectItem value="partial_credit">Partial Credit</SelectItem>
-                      <SelectItem value="no_credit">No Credit</SelectItem>
+                      <SelectItem value="no_penalty">{t.noPenalty}</SelectItem>
+                      <SelectItem value="partial_credit">{t.partialCredit}</SelectItem>
+                      <SelectItem value="no_credit">{t.noCredit}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 
                 <div>
-                  <Label>Default Course Visibility</Label>
+                  <Label>{t.defaultCourseVisibility}</Label>
                   <Select value={settings.teaching.courseVisibility} onValueChange={(value) => updateSettings('teaching', 'courseVisibility', value)}>
                     <SelectTrigger className="mt-1">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="public">Public</SelectItem>
-                      <SelectItem value="unlisted">Unlisted</SelectItem>
-                      <SelectItem value="private">Private</SelectItem>
+                      <SelectItem value="public">{t.public}</SelectItem>
+                      <SelectItem value="unlisted">{t.unlisted}</SelectItem>
+                      <SelectItem value="private">{t.private}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 
                 <div className="flex items-center justify-between">
-                  <Label>Enable Plagiarism Check</Label>
+                  <Label>{t.enablePlagiarismCheck}</Label>
                   <Switch 
                     checked={settings.teaching.plagiarismCheck}
                     onCheckedChange={(value) => updateSettings('teaching', 'plagiarismCheck', value)}
@@ -543,7 +694,7 @@ export function SettingsPanel({ userRole, userId, userName }) {
                 </div>
                 
                 <div className="flex items-center justify-between">
-                  <Label>Allow Student-to-Student Messaging</Label>
+                  <Label>{t.allowStudentMessaging}</Label>
                   <Switch 
                     checked={settings.teaching.studentMessaging}
                     onCheckedChange={(value) => updateSettings('teaching', 'studentMessaging', value)}
@@ -566,17 +717,17 @@ export function SettingsPanel({ userRole, userId, userName }) {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <SettingsIcon className="h-5 w-5" />
-              System Configuration
+              {t.systemConfiguration}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             <div>
-              <h4 className="font-semibold mb-4">User Management</h4>
+              <h4 className="font-semibold mb-4">{t.userManagement}</h4>
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <Label>Enable Self-Registration</Label>
-                    <p className="text-sm text-muted-foreground">Allow users to register without invitation</p>
+                    <Label>{t.enableSelfRegistration}</Label>
+                    <p className="text-sm text-muted-foreground">{t.enableSelfRegistrationDesc}</p>
                   </div>
                   <Switch 
                     checked={settings.admin.userRegistration}
@@ -586,8 +737,8 @@ export function SettingsPanel({ userRole, userId, userName }) {
                 
                 <div className="flex items-center justify-between">
                   <div>
-                    <Label>Course Approval Required</Label>
-                    <p className="text-sm text-muted-foreground">Require admin approval for new courses</p>
+                    <Label>{t.courseApprovalRequired}</Label>
+                    <p className="text-sm text-muted-foreground">{t.courseApprovalRequiredDesc}</p>
                   </div>
                   <Switch 
                     checked={settings.admin.courseApproval}
@@ -600,40 +751,40 @@ export function SettingsPanel({ userRole, userId, userName }) {
             <Separator />
             
             <div>
-              <h4 className="font-semibold mb-4">System Settings</h4>
+              <h4 className="font-semibold mb-4">{t.systemSettings}</h4>
               <div className="space-y-4">
                 <div>
-                  <Label>Backup Frequency</Label>
+                  <Label>{t.backupFrequency}</Label>
                   <Select value={settings.admin.backupFrequency} onValueChange={(value) => updateSettings('admin', 'backupFrequency', value)}>
                     <SelectTrigger className="mt-1">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="hourly">Hourly</SelectItem>
-                      <SelectItem value="daily">Daily</SelectItem>
-                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="hourly">{t.hourly}</SelectItem>
+                      <SelectItem value="daily">{t.daily}</SelectItem>
+                      <SelectItem value="weekly">{t.weekly}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 
                 <div>
-                  <Label>Password Policy</Label>
+                  <Label>{t.passwordPolicy}</Label>
                   <Select value={settings.admin.passwordPolicy} onValueChange={(value) => updateSettings('admin', 'passwordPolicy', value)}>
                     <SelectTrigger className="mt-1">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="weak">Basic (6+ characters)</SelectItem>
-                      <SelectItem value="medium">Medium (8+ chars, mixed case)</SelectItem>
-                      <SelectItem value="strong">Strong (12+ chars, symbols)</SelectItem>
+                      <SelectItem value="weak">{t.basicPolicy}</SelectItem>
+                      <SelectItem value="medium">{t.mediumPolicy}</SelectItem>
+                      <SelectItem value="strong">{t.strongPolicy}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 
                 <div className="flex items-center justify-between">
                   <div>
-                    <Label>Maintenance Mode</Label>
-                    <p className="text-sm text-muted-foreground">Enable system maintenance mode</p>
+                    <Label>{t.maintenanceMode}</Label>
+                    <p className="text-sm text-muted-foreground">{t.maintenanceModeDesc}</p>
                   </div>
                   <Switch 
                     checked={settings.admin.systemMaintenance}
@@ -652,53 +803,63 @@ export function SettingsPanel({ userRole, userId, userName }) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold">Settings</h2>
-          <p className="text-muted-foreground">Manage your account preferences and system settings</p>
+          <h2 className="text-3xl font-bold">{t.settings}</h2>
+          <p className="text-muted-foreground">{t.managePreferences}</p>
         </div>
-        <Button>
+        <Button onClick={handleSaveSettings} disabled={saving || loading}>
           <Save className="h-4 w-4 mr-2" />
-          Save Changes
+          {saving ? t.saving : t.saveChanges}
         </Button>
       </div>
 
-      <Tabs defaultValue="profile" className="w-full">
-        <TabsList className="grid w-full grid-cols-6">
-          <TabsTrigger value="profile">Profile</TabsTrigger>
-          <TabsTrigger value="appearance">Appearance</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
-          <TabsTrigger value="privacy">Privacy</TabsTrigger>
-          <TabsTrigger value="course">
-            {userRole === 'student' ? 'Course' : userRole === 'teacher' ? 'Teaching' : 'System'}
-          </TabsTrigger>
-          {userRole === 'admin' && <TabsTrigger value="admin">Admin</TabsTrigger>}
-        </TabsList>
+      {loading ? (
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-center">
+              <p className="text-muted-foreground">{t.loadingSettings}</p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Tabs defaultValue="profile" className="w-full">
+          <TabsList className="grid w-full grid-cols-6">
+            <TabsTrigger value="profile">{t.profile}</TabsTrigger>
+            <TabsTrigger value="appearance">{t.appearance}</TabsTrigger>
+            <TabsTrigger value="notifications">{t.notifications}</TabsTrigger>
+            <TabsTrigger value="privacy">{t.privacy}</TabsTrigger>
+            <TabsTrigger value="course">
+              {userRole === 'student' ? t.course : userRole === 'teacher' ? t.teaching : t.system}
+            </TabsTrigger>
+            {userRole === 'admin' && <TabsTrigger value="admin">{t.admin}</TabsTrigger>}
+          </TabsList>
 
-        <TabsContent value="profile" className="space-y-4">
-          <ProfileSettings />
-        </TabsContent>
-
-        <TabsContent value="appearance" className="space-y-4">
-          <AppearanceSettings />
-        </TabsContent>
-
-        <TabsContent value="notifications" className="space-y-4">
-          <NotificationSettings />
-        </TabsContent>
-
-        <TabsContent value="privacy" className="space-y-4">
-          <PrivacySecuritySettings />
-        </TabsContent>
-
-        <TabsContent value="course" className="space-y-4">
-          {userRole === 'admin' ? <AdminSettings /> : <CourseSettings />}
-        </TabsContent>
-
-        {userRole === 'admin' && (
-          <TabsContent value="admin" className="space-y-4">
-            <AdminSettings />
+          <TabsContent value="profile" className="space-y-4">
+            <ProfileSettings />
           </TabsContent>
-        )}
-      </Tabs>
+
+          <TabsContent value="appearance" className="space-y-4">
+            <AppearanceSettings />
+          </TabsContent>
+
+          <TabsContent value="notifications" className="space-y-4">
+            <NotificationSettings />
+          </TabsContent>
+
+          <TabsContent value="privacy" className="space-y-4">
+            <PrivacySecuritySettings />
+          </TabsContent>
+
+          <TabsContent value="course" className="space-y-4">
+            {userRole === 'admin' ? <AdminSettings /> : <CourseSettings />}
+          </TabsContent>
+
+          {userRole === 'admin' && (
+            <TabsContent value="admin" className="space-y-4">
+              <AdminSettings />
+            </TabsContent>
+          )}
+        </Tabs>
+      )}
     </div>
   );
 }

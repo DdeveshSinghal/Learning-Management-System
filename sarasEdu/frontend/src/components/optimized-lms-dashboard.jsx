@@ -44,6 +44,7 @@ import { ErrorBoundary } from './error-boundary';
 // Import lightweight components directly
 import { SimpleCourses } from './simple-courses';
 import { EnhancedDashboardSections } from './enhanced-dashboard-sections';
+import { NotificationCenter } from './notification-center';
 
 // Lazy load heavy components
 const AITutor = lazy(() => import('./ai-tutor').then(module => ({ default: module.AITutor })));
@@ -442,9 +443,16 @@ export function OptimizedLMSDashboard() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-background text-foreground">
       {/* Sidebar */}
-      <div className={`bg-white border-r transition-all duration-300 ${sidebarCollapsed ? 'w-16' : 'w-64'}`}>
+      <div
+        className={`border-r transition-all duration-300 ${sidebarCollapsed ? 'w-16' : 'w-64'}`}
+        style={{
+          backgroundColor: 'var(--sidebar)',
+          color: 'var(--sidebar-foreground)',
+          borderColor: 'var(--sidebar-border)'
+        }}
+      >
         <div className="p-4">
           <div className="flex items-center gap-3">
             {!sidebarCollapsed && (
@@ -483,15 +491,16 @@ export function OptimizedLMSDashboard() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <div className="bg-white border-b px-6 py-4">
+        <div
+          className="border-b px-6 py-4"
+          style={{ backgroundColor: 'var(--card)', color: 'var(--card-foreground)', borderColor: 'var(--border)' }}
+        >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <h1 className="text-2xl font-semibold capitalize">{currentPage.replace(/-/g, ' ')}</h1>
             </div>
             <div className="flex items-center gap-4">
-              <Button variant="ghost" size="sm" onClick={() => navigateToPage('profile')}>
-                <Bell className="h-4 w-4" />
-              </Button>
+              <NotificationCenter />
               <div className="flex items-center gap-3">
                 <Avatar>
                   <AvatarFallback>
@@ -511,7 +520,7 @@ export function OptimizedLMSDashboard() {
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-auto p-6">
+        <div className="flex-1 overflow-auto p-6 bg-background text-foreground">
           <Routes>
             <Route index element={<SimpleDashboard />} />
             <Route path="dashboard" element={<SimpleDashboard />} />

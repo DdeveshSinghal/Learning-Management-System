@@ -2,7 +2,7 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.contrib.auth import get_user_model
 
-from .models import StudentProfile, TeacherProfile, AdminProfile
+from .models import StudentProfile, TeacherProfile, AdminProfile, UserSettings
 
 User = get_user_model()
 
@@ -24,3 +24,16 @@ def create_user_profile(sender, instance, created, **kwargs):
             print(f'Failed to create profile for user {instance.id}')
         except Exception:
             pass
+
+
+@receiver(post_save, sender=User)
+def create_user_settings(sender, instance, created, **kwargs):
+    """Auto-create UserSettings when a user is created."""
+    if created:
+        try:
+            UserSettings.objects.get_or_create(user=instance)
+        except Exception:
+            try:
+                print(f'Failed to create settings for user {instance.id}')
+            except Exception:
+                pass

@@ -19,7 +19,7 @@ from .models import (
     Enrollment, LectureProgress, Assignment, AssignmentSubmission, AssignmentAttachment,
     Test, Question, TestSubmission, TestAnswer, AttendanceRecord,
     LibraryItem, LibraryFavorite, LibraryDownload, Event, Announcement, Upload,
-    StudentProfile, TeacherProfile, AdminProfile
+    StudentProfile, TeacherProfile, AdminProfile, UserSettings
 )
 
 User = get_user_model()
@@ -29,7 +29,7 @@ from .serializers import (
     EnrollmentSerializer, LectureProgressSerializer, AssignmentSerializer, AssignmentSubmissionSerializer, AssignmentAttachmentSerializer,
     TestSerializer, QuestionSerializer, TestSubmissionSerializer, TestAnswerSerializer, AttendanceRecordSerializer,
     LibraryItemSerializer, LibraryFavoriteSerializer, LibraryDownloadSerializer, EventSerializer, AnnouncementSerializer, UploadSerializer,
-    StudentProfileSerializer, TeacherProfileSerializer, AdminProfileSerializer
+    StudentProfileSerializer, TeacherProfileSerializer, AdminProfileSerializer, UserSettingsSerializer
 )
 
 
@@ -1242,3 +1242,35 @@ class TeacherProfileViewSet(BaseModelViewSet):
 class AdminProfileViewSet(BaseModelViewSet):
     queryset = AdminProfile.objects.all()
     serializer_class = AdminProfileSerializer
+
+
+class UserSettingsViewSet(viewsets.ModelViewSet):
+    """ViewSet for user settings - users can only access their own settings"""
+    serializer_class = UserSettingsSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        # Users can only see their own settings
+        return UserSettings.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        # Create settings for the current user
+        serializer.save(user=self.request.user)
+    
+    @action(detail=False, methods=['get', 'put', 'patch'])
+    def me(self, request):
+        """Get or update current user's settings"""
+        # Get or create settings for current user
+        settings, created = UserSettings.objects.get_or_create(user=request.user)
+        
+        if request.method == 'GET':
+            serializer = self.get_serializer(settings)
+            return Response(serializer.data)
+        
+        # Handle PUT/PATCH
+        partial = request.method == 'PATCH'
+        serializer = self.get_serializer(settings, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+

@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import { LoginScreen } from './components/login-screen';
 import { OptimizedLMSDashboard } from './components/optimized-lms-dashboard';
 
@@ -57,10 +58,12 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <div className="min-h-screen bg-background">
-        <AppRoutes />
-      </div>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <div className="min-h-screen bg-background">
+          <AppRoutes />
+        </div>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

@@ -378,3 +378,57 @@ class Upload(models.Model):
     uploaded_by = models.ForeignKey('core.User', on_delete=models.SET_NULL, null=True, blank=True)
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
+
+class UserSettings(models.Model):
+    """User settings for profile, appearance, notifications, privacy, and role-specific preferences"""
+    user = models.OneToOneField('core.User', on_delete=models.CASCADE, related_name='settings', primary_key=True)
+    
+    # Appearance settings
+    theme = models.CharField(max_length=20, default='light', choices=[('light', 'Light'), ('dark', 'Dark')])
+    language = models.CharField(max_length=10, default='en', choices=[('en', 'English'), ('hi', 'Hindi')])
+    timezone = models.CharField(max_length=50, default='UTC-5')
+    dashboard_view = models.CharField(max_length=50, default='default', choices=[('default', 'Default'), ('courses', 'Courses'), ('calendar', 'Calendar'), ('analytics', 'Analytics')])
+    
+    # Notification settings
+    email_notifications = models.BooleanField(default=True)
+    inapp_notifications = models.BooleanField(default=True)
+    sms_notifications = models.BooleanField(default=False)
+    notify_assignments = models.BooleanField(default=True)
+    notify_grades = models.BooleanField(default=True)
+    notify_announcements = models.BooleanField(default=True)
+    notify_reminders = models.BooleanField(default=True)
+    notify_discussion_replies = models.BooleanField(default=False)
+    notify_student_submissions = models.BooleanField(default=False)
+    
+    # Privacy settings
+    profile_visibility = models.CharField(max_length=20, default='public', choices=[('public', 'Public'), ('students', 'Students Only'), ('teachers', 'Teachers Only'), ('private', 'Private')])
+    email_visible = models.BooleanField(default=False)
+    phone_visible = models.BooleanField(default=False)
+    allow_messaging = models.BooleanField(default=True)
+    two_factor_auth = models.BooleanField(default=False)
+    
+    # Student course preferences
+    auto_enrollment = models.BooleanField(default=False)
+    deadline_reminders = models.BooleanField(default=True)
+    late_submission_warning = models.BooleanField(default=True)
+    
+    # Teacher preferences
+    default_grading_scheme = models.CharField(max_length=20, default='percentage', choices=[('percentage', 'Percentage'), ('letter', 'Letter Grade'), ('points', 'Points')])
+    late_submission_policy = models.CharField(max_length=20, default='partial_credit', choices=[('no_penalty', 'No Penalty'), ('partial_credit', 'Partial Credit'), ('no_credit', 'No Credit')])
+    course_visibility = models.CharField(max_length=20, default='public', choices=[('public', 'Public'), ('unlisted', 'Unlisted'), ('private', 'Private')])
+    plagiarism_check = models.BooleanField(default=True)
+    student_messaging = models.BooleanField(default=True)
+    
+    # Admin settings
+    user_registration = models.BooleanField(default=True)
+    course_approval = models.BooleanField(default=False)
+    system_maintenance = models.BooleanField(default=False)
+    backup_frequency = models.CharField(max_length=20, default='daily', choices=[('hourly', 'Hourly'), ('daily', 'Daily'), ('weekly', 'Weekly')])
+    password_policy = models.CharField(max_length=20, default='strong', choices=[('weak', 'Weak'), ('medium', 'Medium'), ('strong', 'Strong')])
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"Settings for {self.user.username}"
+

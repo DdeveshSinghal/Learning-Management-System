@@ -584,6 +584,54 @@ export async function changePassword(oldPassword, newPassword) {
   });
 }
 
+// User Settings API
+export async function getUserSettings() {
+  return await request('/user-settings/me/', { method: 'GET' });
+}
+
+export async function updateUserSettings(payload) {
+  return await request('/user-settings/me/', { 
+    method: 'PATCH', 
+    body: JSON.stringify(payload), 
+    headers: { 'Content-Type': 'application/json' } 
+  });
+}
+
+export async function getNotifications(filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.limit) params.append('limit', filters.limit);
+  if (filters.offset) params.append('offset', filters.offset);
+  if (filters.read !== undefined) params.append('read', filters.read);
+  const query = params.toString() ? `?${params.toString()}` : '';
+  return await request(`/notifications${query}`);
+}
+
+export async function markNotificationAsRead(id) {
+  return await request(`/notifications/${id}/mark-as-read/`, { 
+    method: 'POST', 
+    headers: { 'Content-Type': 'application/json' } 
+  });
+}
+
+export async function markAllNotificationsAsRead() {
+  return await request('/notifications/mark-all-as-read/', { 
+    method: 'POST', 
+    headers: { 'Content-Type': 'application/json' } 
+  });
+}
+
+export async function deleteNotification(id) {
+  return await request(`/notifications/${id}/`, { 
+    method: 'DELETE' 
+  });
+}
+
+export async function deleteAllNotifications() {
+  return await request('/notifications/delete-all/', { 
+    method: 'DELETE' 
+  });
+}
+
 export default {
   login,
   register,
@@ -623,4 +671,11 @@ export default {
   getAdminProfile,
   updateAdminProfile,
   changePassword,
+  getUserSettings,
+  updateUserSettings,
+  getNotifications,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+  deleteNotification,
+  deleteAllNotifications,
 };

@@ -35,6 +35,7 @@ router.register(r'uploads', viewsets.UploadViewSet)
 router.register(r'student-profiles', viewsets.StudentProfileViewSet)
 router.register(r'teacher-profiles', viewsets.TeacherProfileViewSet)
 router.register(r'admin-profiles', viewsets.AdminProfileViewSet)
+router.register(r'user-settings', viewsets.UserSettingsViewSet, basename='user-settings')
 
 urlpatterns = [
     path('auth/login', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
