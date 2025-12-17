@@ -14,7 +14,6 @@ import {
   Calendar as CalendarIcon, 
   Plus, 
   Play, 
-  Settings,
   Link,
   Copy,
   Edit,
@@ -651,16 +650,10 @@ export function LiveClasses({ userRole }) {
           </p>
         </div>
         {userRole === 'teacher' && (
-          <div className="flex gap-2">
-            <Button variant="outline">
-              <Settings className="h-4 w-4 mr-2" />
-              Settings
-            </Button>
-            <Button onClick={() => setShowCreateDialog(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Create Live Class
-            </Button>
-          </div>
+          <Button onClick={() => setShowCreateDialog(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Create Live Class
+          </Button>
         )}
       </div>
 

@@ -1335,10 +1335,6 @@ function CreateAssignmentDialog({ open, onOpenChange, onCreated, initial = null,
               Create Assignment
             </Button>
           )}
-          <Button variant="outline" size="sm">
-            <Filter className="h-4 w-4 mr-2" />
-            Filter
-          </Button>
         </div>
       </div>
 

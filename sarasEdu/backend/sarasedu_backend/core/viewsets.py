@@ -19,7 +19,7 @@ from .models import (
     Enrollment, LectureProgress, Assignment, AssignmentSubmission, AssignmentAttachment,
     Test, Question, TestSubmission, TestAnswer, AttendanceRecord,
     LibraryItem, LibraryFavorite, LibraryDownload, Event, Announcement, Upload,
-    StudentProfile, TeacherProfile, AdminProfile, UserSettings, ActivityLog, SystemAlert, Notification
+    StudentProfile, TeacherProfile, AdminProfile, UserSettings, ActivityLog, SystemAlert, Notification, CourseRating
 )
 
 User = get_user_model()
@@ -30,7 +30,7 @@ from .serializers import (
     TestSerializer, QuestionSerializer, TestSubmissionSerializer, TestAnswerSerializer, AttendanceRecordSerializer,
     LibraryItemSerializer, LibraryFavoriteSerializer, LibraryDownloadSerializer, EventSerializer, AnnouncementSerializer, UploadSerializer,
     StudentProfileSerializer, TeacherProfileSerializer, AdminProfileSerializer, UserSettingsSerializer,
-    ActivityLogSerializer, SystemAlertSerializer, NotificationSerializer
+    ActivityLogSerializer, SystemAlertSerializer, NotificationSerializer, CourseRatingSerializer
 )
 
 
@@ -1401,5 +1401,99 @@ class NotificationViewSet(viewsets.ModelViewSet):
                 {'detail': f'Error marking notifications as read: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class CourseRatingViewSet(BaseModelViewSet):
+    """
+    ViewSet for course ratings. Students can rate courses they are enrolled in.
+    Ratings cannot be updated or deleted once submitted.
+    """
+    queryset = CourseRating.objects.all()
+    serializer_class = CourseRatingSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """Filter ratings by course if course parameter is provided."""
+        qs = super().get_queryset()
+        course_id = self.request.query_params.get('course')
+        if course_id:
+            try:
+                qs = qs.filter(course_id=course_id)
+            except Exception:
+                pass
+        return qs
+    
+    def create(self, request, *args, **kwargs):
+        """Create a rating for a course. Ratings cannot be updated once created."""
+        user = request.user
+        course_id = request.data.get('course')
+        rating_value = request.data.get('rating')
+        review = request.data.get('review', '')
+        
+        if not course_id:
+            return Response({'detail': 'course field is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not rating_value:
+            return Response({'detail': 'rating field is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            course = Course.objects.get(id=course_id)
+        except Course.DoesNotExist:
+            return Response({'detail': 'Course not found.'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if user already has a rating for this course
+        existing_rating = CourseRating.objects.filter(course=course, student=user).exists()
+        if existing_rating:
+            return Response(
+                {'detail': 'You have already rated this course. Ratings cannot be updated.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check if user is enrolled in the course
+        if user.role == 'student':
+            enrollment_exists = Enrollment.objects.filter(student=user, course=course).exists()
+            if not enrollment_exists:
+                return Response(
+                    {'detail': 'You must be enrolled in this course to rate it.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # Create rating
+        rating = CourseRating.objects.create(
+            course=course,
+            student=user,
+            rating=rating_value,
+            review=review
+        )
+        
+        # Update course average rating
+        from django.db.models import Avg
+        avg_rating = CourseRating.objects.filter(course=course).aggregate(avg=Avg('rating'))['avg']
+        course.average_rating = round(avg_rating, 2) if avg_rating else 0
+        course.save(update_fields=['average_rating'])
+        
+        serializer = self.get_serializer(rating)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    def update(self, request, *args, **kwargs):
+        """Update is not allowed for ratings."""
+        return Response(
+            {'detail': 'Ratings cannot be updated once submitted.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    def partial_update(self, request, *args, **kwargs):
+        """Partial update is not allowed for ratings."""
+        return Response(
+            {'detail': 'Ratings cannot be updated once submitted.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    def destroy(self, request, *args, **kwargs):
+        """Delete is not allowed for ratings."""
+        return Response(
+            {'detail': 'Ratings cannot be deleted once submitted.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
 
 

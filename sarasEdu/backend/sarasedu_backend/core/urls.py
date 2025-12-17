@@ -39,6 +39,7 @@ router.register(r'user-settings', viewsets.UserSettingsViewSet, basename='user-s
 router.register(r'activity-logs', viewsets.ActivityLogViewSet, basename='activity-logs')
 router.register(r'system-alerts', viewsets.SystemAlertViewSet, basename='system-alerts')
 router.register(r'notifications', viewsets.NotificationViewSet, basename='notifications')
+router.register(r'course-ratings', viewsets.CourseRatingViewSet, basename='course-ratings')
 
 urlpatterns = [
     path('auth/login', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),

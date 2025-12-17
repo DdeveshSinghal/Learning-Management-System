@@ -656,6 +656,26 @@ export async function checkEnrollment(courseId, studentId) {
   return enrollments.find(e => e.course === courseId && e.student === studentId);
 }
 
+// Course Rating functions
+export async function getCourseRatings(courseId) {
+  const params = courseId ? `?course=${courseId}` : '';
+  const data = await request(`/course-ratings${params}`);
+  if (data && data.results) return data.results;
+  return data || [];
+}
+
+export async function rateCourse(courseId, rating, review = '') {
+  return await request('/course-ratings/', {
+    method: 'POST',
+    body: JSON.stringify({
+      course: courseId,
+      rating: rating,
+      review: review
+    }),
+    headers: { 'Content-Type': 'application/json' }
+  });
+}
+
 export default {
   login,
   register,
@@ -705,4 +725,6 @@ export default {
   getEnrollments,
   enrollInCourse,
   checkEnrollment,
+  getCourseRatings,
+  rateCourse,
 };

@@ -6,7 +6,7 @@ from .models import (
     Enrollment, LectureProgress, Assignment, AssignmentSubmission, AssignmentAttachment,
     Test, Question, TestSubmission, TestAnswer, AttendanceRecord,
     LibraryItem, LibraryFavorite, LibraryDownload, Event, Announcement, Upload,
-    StudentProfile, TeacherProfile, AdminProfile, UserSettings, ActivityLog, SystemAlert, Notification
+    StudentProfile, TeacherProfile, AdminProfile, UserSettings, ActivityLog, SystemAlert, Notification, CourseRating
 )
 from django.contrib.auth.password_validation import validate_password
 from django.db.models import Avg
@@ -359,3 +359,22 @@ class NotificationSerializer(serializers.ModelSerializer):
     
     def get_user_name(self, obj):
         return obj.user.username if obj.user else None
+
+
+class CourseRatingSerializer(serializers.ModelSerializer):
+    student_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = CourseRating
+        fields = ('id', 'course', 'student', 'student_name', 'rating', 'review', 'created_at', 'updated_at')
+        read_only_fields = ('created_at', 'updated_at')
+    
+    def get_student_name(self, obj):
+        if obj.student:
+            return f"{obj.student.first_name} {obj.student.last_name}".strip() or obj.student.username
+        return None
+    
+    def validate_rating(self, value):
+        if value < 0 or value > 5:
+            raise serializers.ValidationError("Rating must be between 0 and 5")
+        return value

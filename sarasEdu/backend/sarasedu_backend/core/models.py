@@ -531,3 +531,20 @@ class Notification(models.Model):
     
     def __str__(self):
         return f"{self.title} - {self.user.username}"
+
+
+class CourseRating(models.Model):
+    """Student ratings for courses."""
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='ratings')
+    student = models.ForeignKey(User, on_delete=models.CASCADE, related_name='course_ratings')
+    rating = models.DecimalField(max_digits=2, decimal_places=1)  # 0.0 to 5.0
+    review = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ('course', 'student')
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.student.username} rated {self.course.title}: {self.rating}"

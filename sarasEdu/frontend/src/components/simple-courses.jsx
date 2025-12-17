@@ -12,11 +12,11 @@ import {
   Clock,
   Plus,
   Search,
-  Filter,
   Eye,
   Edit,
   Play,
-  UserPlus
+  UserPlus,
+  StarIcon
 } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { EnhancedCourseDetail } from './enhanced-course-detail';
@@ -36,6 +36,10 @@ export function SimpleCourses({ userRole }) {
   const [enrollments, setEnrollments] = useState([]);
   const [enrollingCourseId, setEnrollingCourseId] = useState(null);
   const [courseEnrollmentCounts, setCourseEnrollmentCounts] = useState({});
+  const [userRatings, setUserRatings] = useState({});
+  const [ratingDialogOpen, setRatingDialogOpen] = useState(null);
+  const [tempRating, setTempRating] = useState(0);
+  const [tempReview, setTempReview] = useState('');
 
   useEffect(() => {
     let mounted = true;
@@ -74,6 +78,31 @@ export function SimpleCourses({ userRole }) {
               setCourseEnrollmentCounts({});
             }
           }
+          
+          // Fetch user's ratings for enrolled courses
+          if (userRole === 'student' && user && user.id) {
+            try {
+              const allRatings = await api.getCourseRatings();
+              const ratingsByUser = {};
+              const ratingsList = Array.isArray(allRatings) ? allRatings : allRatings.results || [];
+              
+              ratingsList.forEach(rating => {
+                if (rating.student === user.id) {
+                  ratingsByUser[rating.course] = rating;
+                }
+              });
+              
+              if (mounted) {
+                setUserRatings(ratingsByUser);
+              }
+            } catch (err) {
+              // Silently fail if ratings endpoint doesn't exist yet (migration not run)
+              console.warn('Ratings not available yet. Run migrations to enable this feature.');
+              if (mounted) {
+                setUserRatings({});
+              }
+            }
+          }
         }
       } catch (error) {
         if (mounted) {
@@ -88,7 +117,7 @@ export function SimpleCourses({ userRole }) {
     
     fetchData();
     return () => { mounted = false; };
-  }, [userRole]);
+  }, [userRole, user]);
 
   const handleEnroll = async (courseId) => {
     if (!user || !user.id) {
@@ -116,6 +145,62 @@ export function SimpleCourses({ userRole }) {
     if (!user || !user.id) return false;
     return enrollments.some(e => e.course === courseId && e.student === user.id);
   };
+
+  const handleRating = async (courseId) => {
+    // Only allow rating if student hasn't rated yet
+    if (userRatings[courseId]) {
+      toast.error('You have already rated this course. Ratings cannot be updated.');
+      return;
+    }
+    setTempRating(0);
+    setTempReview('');
+    setRatingDialogOpen(courseId);
+  };
+
+  const submitRating = async () => {
+    if (!ratingDialogOpen || tempRating === 0) {
+      toast.error('Please select a rating');
+      return;
+    }
+
+    try {
+      // Only allow creating new ratings, not updating
+      await api.rateCourse(ratingDialogOpen, tempRating, tempReview);
+      toast.success('Rating submitted successfully!');
+      
+      // Add the new rating to local state
+      setUserRatings(prev => ({
+        ...prev,
+        [ratingDialogOpen]: {
+          id: 'new',
+          course: ratingDialogOpen,
+          rating: tempRating,
+          review: tempReview
+        }
+      }));
+      
+      // Refresh courses to get updated average rating
+      const updatedCourses = await api.getCourses();
+      setCourses(updatedCourses || []);
+      
+      setRatingDialogOpen(null);
+      setTempRating(0);
+      setTempReview('');
+    } catch (error) {
+      console.error('Rating error:', error);
+      // Check if it's a 500 error indicating migrations need to be run
+      if (error.message && error.message.includes('500')) {
+        toast.error('Rating feature not yet enabled. Please contact administrator.');
+      } else {
+        toast.error(error.message || 'Failed to submit rating');
+      }
+    }
+  };
+
+  const filteredCourses = courses.filter(course =>
+    course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (course.description && course.description.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
 
   if (selectedCourse) {
     return (
@@ -154,10 +239,6 @@ export function SimpleCourses({ userRole }) {
               className="w-64"
             />
           </div>
-          <Button variant="outline">
-            <Filter className="h-4 w-4 mr-2" />
-            Filter
-          </Button>
           {userRole === 'teacher' && (
             <Button onClick={() => setCourseCreationMode({ mode: 'create' })}>
               <Plus className="h-4 w-4 mr-2" />
@@ -171,7 +252,7 @@ export function SimpleCourses({ userRole }) {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {loading ? (
           <div>Loading courses...</div>
-        ) : courses.map((course) => (
+        ) : filteredCourses.map((course) => (
           <Card key={course.id} className="hover:shadow-lg transition-shadow">
             <div className="aspect-video relative">
               {(() => {
@@ -214,7 +295,7 @@ export function SimpleCourses({ userRole }) {
                 );
               })()}
               <div className="absolute top-2 right-2">
-                <Badge variant="secondary">{course.rating}★</Badge>
+                <Badge variant="secondary">{course.average_rating || 0}★</Badge>
               </div>
             </div>
             <CardContent className="p-4">
@@ -242,18 +323,29 @@ export function SimpleCourses({ userRole }) {
                           </div>
                           <Progress value={course.progress || 0} />
                         </div>
-                        <div className="flex gap-2">
-                          <Button size="sm" className="flex-1" onClick={() => setSelectedCourse(course.id)}>
+                        <div className="flex flex-wrap gap-2">
+                          <Button size="sm" className="flex-1 min-w-[140px]" onClick={() => setSelectedCourse(course.id)}>
                             <Play className="h-3 w-3 mr-1" />
                             Continue Learning
+                          </Button>
+                          <Button 
+                            size="sm"
+                            variant={userRatings[course.id] ? "secondary" : "outline"}
+                            onClick={() => handleRating(course.id)}
+                            disabled={userRatings[course.id]}
+                            title={userRatings[course.id] ? 'You have already rated this course' : 'Rate this course'}
+                            className="min-w-[140px]"
+                          >
+                            <Star className="h-3 w-3 mr-1" />
+                            {userRatings[course.id] ? `Rated ${userRatings[course.id].rating}★` : 'Rate'}
                           </Button>
                         </div>
                       </>
                     ) : (
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <Button 
                           size="sm" 
-                          className="flex-1" 
+                          className="flex-1 min-w-[140px]" 
                           onClick={() => handleEnroll(course.id)}
                           disabled={enrollingCourseId === course.id}
                         >
@@ -269,10 +361,10 @@ export function SimpleCourses({ userRole }) {
                       <Badge variant="outline">{courseEnrollmentCounts[course.id] || 0} students</Badge>
                       <div className="flex items-center gap-1 text-sm text-muted-foreground">
                         <Star className="h-3 w-3" />
-                        <span>{course.rating}</span>
+                        <span>{course.average_rating || 0}</span>
                       </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <Button size="sm" variant="outline" className="flex-1" onClick={() => setSelectedCourse(course.id)}>
                         <Eye className="h-3 w-3 mr-1" />
                         View
@@ -294,6 +386,70 @@ export function SimpleCourses({ userRole }) {
           </Card>
         ))}
       </div>
+
+      {/* Rating Dialog */}
+      {ratingDialogOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-xl">
+            <h3 className="text-xl font-bold mb-4">Rate This Course</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Your Rating</label>
+                <div className="flex gap-2">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      onClick={() => setTempRating(star)}
+                      className="focus:outline-none hover:scale-110 transition-transform"
+                      type="button"
+                    >
+                      <Star
+                        className={`h-8 w-8 cursor-pointer ${
+                          star <= tempRating
+                            ? 'fill-yellow-400 text-yellow-400'
+                            : 'text-gray-300 hover:text-yellow-300'
+                        }`}
+                      />
+                    </button>
+                  ))}
+                </div>
+                {tempRating > 0 && (
+                  <p className="mt-2 text-sm text-gray-600">Your rating: {tempRating} star{tempRating !== 1 ? 's' : ''}</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Review (Optional)</label>
+                <textarea
+                  value={tempReview}
+                  onChange={(e) => setTempReview(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md p-2 min-h-[100px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Share your thoughts about this course..."
+                />
+              </div>
+              <div className="flex gap-2 justify-end pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setRatingDialogOpen(null);
+                    setTempRating(0);
+                    setTempReview('');
+                  }}
+                  type="button"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={submitRating}
+                  disabled={tempRating === 0}
+                  type="button"
+                >
+                  Submit Rating
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

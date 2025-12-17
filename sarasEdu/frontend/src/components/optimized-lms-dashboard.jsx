@@ -170,7 +170,7 @@ export function OptimizedLMSDashboard() {
           ? apiRequest('/activity-logs/').catch(() => [])
           : Promise.resolve([]);
         const userDataPromise = (userRole === 'student' && userId)
-          ? apiRequest('/users/me').catch(() => null)
+          ? apiRequest('/auth/me').catch(() => null)
           : Promise.resolve(null);
 
         const [coursesRes, enrollmentsRes, liveClassesRes, notificationsRes, attendanceRes, testSubsRes, usersRes, activityLogsRes, userDataRes] = await Promise.all([
