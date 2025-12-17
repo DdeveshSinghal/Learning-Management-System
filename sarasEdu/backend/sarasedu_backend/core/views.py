@@ -11,6 +11,7 @@ from django.utils.encoding import force_bytes, force_str
 from django.core.mail import send_mail
 from django.core.files.storage import default_storage
 from django.conf import settings
+from django.utils import timezone
 from .serializers import RegisterSerializer, UserSerializer, AssignmentSubmissionSerializer
 from .models import Course, Assignment, AssignmentSubmission
 from .throttles import AIChatRateThrottle
@@ -73,9 +74,13 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     def post(self, request, *args, **kwargs):
         response = super().post(request, *args, **kwargs)
         if response.status_code == 200 and 'access' in response.data:
-            # attach user info
+            # attach user info and update last_login
             user = get_user_model().objects.filter(username=request.data.get('username') or request.data.get('email')).first()
             if user:
+                # Update last_login timestamp
+                user.last_login = timezone.now()
+                user.save(update_fields=['last_login'])
+                
                 response.data['user'] = UserSerializer(user).data
         return response
 
@@ -293,6 +298,13 @@ class CourseLecturesView(generics.ListAPIView):
     def get_queryset(self):
         course_id = self.kwargs.get('id')
         return Lecture.objects.filter(course_id=course_id).order_by('order_index')
+
+
+class UserListView(generics.ListAPIView):
+    """List all users from core_user table."""
+    serializer_class = UserSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    queryset = get_user_model().objects.all().order_by('id')
 
 
 class UserDetailView(generics.RetrieveAPIView):

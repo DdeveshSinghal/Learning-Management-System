@@ -1,8 +1,8 @@
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.contrib.auth import get_user_model
 
-from .models import StudentProfile, TeacherProfile, AdminProfile, UserSettings
+from .models import StudentProfile, TeacherProfile, AdminProfile, UserSettings, Enrollment
 
 User = get_user_model()
 
@@ -37,3 +37,35 @@ def create_user_settings(sender, instance, created, **kwargs):
                 print(f'Failed to create settings for user {instance.id}')
             except Exception:
                 pass
+
+
+@receiver(post_save, sender=Enrollment)
+def update_course_enrollments_on_create(sender, instance, created, **kwargs):
+    """Update total_enrollments count when an enrollment is created or updated."""
+    try:
+        course = instance.course
+        enrollment_count = Enrollment.objects.filter(course=course).count()
+        if course.total_enrollments != enrollment_count:
+            course.total_enrollments = enrollment_count
+            course.save(update_fields=['total_enrollments'])
+    except Exception:
+        try:
+            print(f'Failed to update total_enrollments for course {instance.course_id}')
+        except Exception:
+            pass
+
+
+@receiver(post_delete, sender=Enrollment)
+def update_course_enrollments_on_delete(sender, instance, **kwargs):
+    """Update total_enrollments count when an enrollment is deleted."""
+    try:
+        course = instance.course
+        enrollment_count = Enrollment.objects.filter(course=course).count()
+        if course.total_enrollments != enrollment_count:
+            course.total_enrollments = enrollment_count
+            course.save(update_fields=['total_enrollments'])
+    except Exception:
+        try:
+            print(f'Failed to update total_enrollments for course {instance.course_id}')
+        except Exception:
+            pass

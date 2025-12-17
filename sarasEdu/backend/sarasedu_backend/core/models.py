@@ -432,3 +432,102 @@ class UserSettings(models.Model):
     def __str__(self):
         return f"Settings for {self.user.username}"
 
+
+class ActivityLog(models.Model):
+    """Track platform activity for admin dashboard."""
+    ACTIVITY_TYPES = (
+        ('user_registered', 'User Registered'),
+        ('course_published', 'Course Published'),
+        ('assignment_submitted', 'Assignment Submitted'),
+        ('test_completed', 'Test Completed'),
+        ('system_maintenance', 'System Maintenance'),
+        ('user_enrolled', 'User Enrolled'),
+        ('announcement_posted', 'Announcement Posted'),
+        ('system_alert', 'System Alert'),
+    )
+    
+    activity_type = models.CharField(max_length=50, choices=ACTIVITY_TYPES)
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    user = models.ForeignKey('core.User', on_delete=models.SET_NULL, null=True, blank=True)
+    course = models.ForeignKey(Course, on_delete=models.SET_NULL, null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.title} ({self.activity_type})"
+
+
+class SystemAlert(models.Model):
+    """Track system health alerts for backend, database, server, payment services."""
+    ALERT_TYPES = (
+        ('backend', 'Backend Service'),
+        ('database', 'Database'),
+        ('server', 'Server'),
+        ('payment', 'Payment System'),
+        ('storage', 'Storage Service'),
+        ('api', 'API Service'),
+        ('email', 'Email Service'),
+    )
+    
+    SEVERITY_CHOICES = (
+        ('low', 'Low'),
+        ('medium', 'Medium'),
+        ('high', 'High'),
+        ('critical', 'Critical'),
+    )
+    
+    STATUS_CHOICES = (
+        ('active', 'Active'),
+        ('resolved', 'Resolved'),
+        ('investigating', 'Investigating'),
+        ('monitoring', 'Monitoring'),
+    )
+    
+    alert_type = models.CharField(max_length=50, choices=ALERT_TYPES)
+    severity = models.CharField(max_length=20, choices=SEVERITY_CHOICES, default='medium')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+    title = models.CharField(max_length=255)
+    description = models.TextField()
+    affected_service = models.CharField(max_length=255, blank=True, null=True)
+    resolution_steps = models.TextField(blank=True, null=True)
+    affected_users_count = models.IntegerField(default=0, blank=True, null=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(blank=True, null=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.title} ({self.alert_type} - {self.severity})"
+
+
+class Notification(models.Model):
+    """User notifications for announcements, messages, and platform updates."""
+    NOTIFICATION_TYPES = (
+        ('announcement', 'Announcement'),
+        ('message', 'Message'),
+        ('update', 'Update'),
+        ('reminder', 'Reminder'),
+        ('alert', 'Alert'),
+    )
+    
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
+    notification_type = models.CharField(max_length=50, choices=NOTIFICATION_TYPES, default='announcement')
+    title = models.CharField(max_length=255)
+    message = models.TextField()
+    related_object_type = models.CharField(max_length=50, blank=True, null=True)  # e.g., 'course', 'announcement'
+    related_object_id = models.IntegerField(blank=True, null=True)
+    read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    read_at = models.DateTimeField(blank=True, null=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.title} - {self.user.username}"

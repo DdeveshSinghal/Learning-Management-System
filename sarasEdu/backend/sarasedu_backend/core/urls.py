@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     RegisterView, me, CustomTokenObtainPairView, AIChatView, AIImageView, AITranscribeView,
     PasswordResetRequestView, PasswordResetConfirmView, ChangePasswordView,
-    CourseLecturesView, UserDetailView, LibraryListCreateView, LibraryDetailView, LibraryDownloadView, AssignmentSubmitView,
+    CourseLecturesView, UserDetailView, UserListView, LibraryListCreateView, LibraryDetailView, LibraryDownloadView, AssignmentSubmitView,
     DriveProxyView,
 )
 from rest_framework_simplejwt.views import TokenRefreshView
@@ -36,6 +36,9 @@ router.register(r'student-profiles', viewsets.StudentProfileViewSet)
 router.register(r'teacher-profiles', viewsets.TeacherProfileViewSet)
 router.register(r'admin-profiles', viewsets.AdminProfileViewSet)
 router.register(r'user-settings', viewsets.UserSettingsViewSet, basename='user-settings')
+router.register(r'activity-logs', viewsets.ActivityLogViewSet, basename='activity-logs')
+router.register(r'system-alerts', viewsets.SystemAlertViewSet, basename='system-alerts')
+router.register(r'notifications', viewsets.NotificationViewSet, basename='notifications')
 
 urlpatterns = [
     path('auth/login', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
@@ -50,6 +53,7 @@ urlpatterns = [
     path('ai/transcribe', AITranscribeView.as_view(), name='ai_transcribe'),
     path('courses/<int:id>/lectures', CourseLecturesView.as_view(), name='course_lectures'),
     path('video-proxy/', DriveProxyView.as_view(), name='video_proxy'),
+    path('users', UserListView.as_view(), name='user_list'),
     path('users/<int:id>', UserDetailView.as_view(), name='user_detail'),
     path('library', LibraryListCreateView.as_view(), name='library_alias'),
     path('library/<int:id>', LibraryDetailView.as_view(), name='library_detail'),

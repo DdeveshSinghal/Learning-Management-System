@@ -1343,9 +1343,13 @@ export function UserManagement({ userType, onSelectStudent, currentUser }) {
                     <GraduationCap className="h-5 w-5 text-blue-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Total Students</p>
+                    <p className="text-sm text-muted-foreground">{isTeacher ? 'My Students' : 'Total Students'}</p>
                     <p className="text-2xl font-bold">{studentsData.length}</p>
-                    {!isTeacher && <p className="text-xs text-green-600">{studentsJoinedThisMonth} joined this month</p>}
+                    {isTeacher ? (
+                      <p className="text-xs text-blue-600">Enrolled in my courses</p>
+                    ) : (
+                      <p className="text-xs text-green-600">{studentsJoinedThisMonth} joined this month</p>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -1373,9 +1377,15 @@ export function UserManagement({ userType, onSelectStudent, currentUser }) {
                     <UserCheck className="h-5 w-5 text-emerald-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">{isTeacher ? 'Active' : 'Active'} Users</p>
-                    <p className="text-2xl font-bold">{isTeacher ? studentsData.filter(s => s.status === 'active').length : activeUsers}</p>
-                    {!isTeacher && <p className="text-xs text-green-600">{activeRate}% active rate</p>}
+                    <p className="text-sm text-muted-foreground">Active Students</p>
+                    <p className="text-2xl font-bold">{studentsData.filter(s => s.status === 'active').length}</p>
+                    {isTeacher ? (
+                      <p className="text-xs text-green-600">
+                        {studentsData.length > 0 ? Math.round((studentsData.filter(s => s.status === 'active').length / studentsData.length) * 100) : 0}% active rate
+                      </p>
+                    ) : (
+                      <p className="text-xs text-green-600">{activeRate}% active rate</p>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -1410,7 +1420,7 @@ export function UserManagement({ userType, onSelectStudent, currentUser }) {
                       <p className="text-2xl font-bold">
                         {studentsData.reduce((sum, s) => sum + (typeof s.totalCourses === 'number' ? s.totalCourses : 0), 0)}
                       </p>
-                      <p className="text-xs text-muted-foreground">Student enrollments</p>
+                      <p className="text-xs text-muted-foreground">In my courses</p>
                     </div>
                   </div>
                 </CardContent>

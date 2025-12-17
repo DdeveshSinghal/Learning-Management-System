@@ -433,6 +433,7 @@ function CreateAssignmentDialog({ open, onOpenChange, onCreated, initial = null,
     try {
       const dueDate = getDueDate(assignment);
       const overdue = isOverdue(dueDate);
+      const baseStatus = (assignment.status || 'active').toLowerCase();
 
       // Student-specific visibility: prefer the student's own submission state
       if (userRole === 'student') {
@@ -445,20 +446,28 @@ function CreateAssignmentDialog({ open, onOpenChange, onCreated, initial = null,
           if (sStatus === 'submitted' || sub.submitted_at || sub.submission_date || sub.submitted_file || sub.submitted_file_url) return 'submitted';
         }
 
-        // No student submission: if assignment marked graded at assignment level treat as graded
-        if ((assignment.status || '').toLowerCase() === 'graded') return 'graded';
-
-        // If due date has passed and there's no submission, mark overdue
+        // No student submission: check priority order
+        // 1. If assignment is marked as graded, show as graded
+        if (baseStatus === 'graded') return 'graded';
+        
+        // 2. If due date has passed and there's no submission, mark overdue
         if (overdue) return 'overdue';
 
-        // Default to assignment.status or 'active' (normalized to lowercase)
-        return (assignment.status || 'active').toLowerCase();
+        // 3. If not overdue, show as active (or use database status if it's draft/archived)
+        if (baseStatus === 'draft' || baseStatus === 'archived') return baseStatus;
+        return 'active';
       }
 
-      // Teacher or other roles: base on assignment.status but mark overdue if past due
-      if ((assignment.status || '').toLowerCase() === 'graded') return 'graded';
+      // Teacher or other roles: prioritize based on due date and graded status
+      // 1. If assignment is graded, show as graded
+      if (baseStatus === 'graded') return 'graded';
+      
+      // 2. If due date has passed, show as overdue regardless of database status
       if (overdue) return 'overdue';
-      return (assignment.status || 'active').toLowerCase();
+      
+      // 3. If not overdue and not graded, show as active (or use database status if it's draft/archived)
+      if (baseStatus === 'draft' || baseStatus === 'archived') return baseStatus;
+      return 'active';
     } catch (e) {
       return assignment.status || 'active';
     }
@@ -1347,9 +1356,10 @@ function CreateAssignmentDialog({ open, onOpenChange, onCreated, initial = null,
           )} 
           {userRole === 'teacher' && (
             <>
-              <TabsTrigger value="active">Active ({assignments.filter(a => a.status === 'active').length})</TabsTrigger>
-              <TabsTrigger value="submitted">Submissions ({assignments.filter(a => a.status === 'submitted').length})</TabsTrigger>
-              <TabsTrigger value="graded">Completed ({assignments.filter(a => a.status === 'graded').length})</TabsTrigger>
+              <TabsTrigger value="active">Active ({activeList.length})</TabsTrigger>
+              <TabsTrigger value="submitted">Submissions ({submittedList.length})</TabsTrigger>
+              <TabsTrigger value="graded">Completed ({gradedList.length})</TabsTrigger>
+              <TabsTrigger value="overdue">Overdue ({overdueList.length})</TabsTrigger>
             </>
           )}
         </TabsList>

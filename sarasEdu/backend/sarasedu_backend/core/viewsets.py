@@ -19,7 +19,7 @@ from .models import (
     Enrollment, LectureProgress, Assignment, AssignmentSubmission, AssignmentAttachment,
     Test, Question, TestSubmission, TestAnswer, AttendanceRecord,
     LibraryItem, LibraryFavorite, LibraryDownload, Event, Announcement, Upload,
-    StudentProfile, TeacherProfile, AdminProfile, UserSettings
+    StudentProfile, TeacherProfile, AdminProfile, UserSettings, ActivityLog, SystemAlert, Notification
 )
 
 User = get_user_model()
@@ -29,7 +29,8 @@ from .serializers import (
     EnrollmentSerializer, LectureProgressSerializer, AssignmentSerializer, AssignmentSubmissionSerializer, AssignmentAttachmentSerializer,
     TestSerializer, QuestionSerializer, TestSubmissionSerializer, TestAnswerSerializer, AttendanceRecordSerializer,
     LibraryItemSerializer, LibraryFavoriteSerializer, LibraryDownloadSerializer, EventSerializer, AnnouncementSerializer, UploadSerializer,
-    StudentProfileSerializer, TeacherProfileSerializer, AdminProfileSerializer, UserSettingsSerializer
+    StudentProfileSerializer, TeacherProfileSerializer, AdminProfileSerializer, UserSettingsSerializer,
+    ActivityLogSerializer, SystemAlertSerializer, NotificationSerializer
 )
 
 
@@ -1043,6 +1044,17 @@ class AnnouncementViewSet(BaseModelViewSet):
     serializer_class = AnnouncementSerializer
     from .permissions import IsTeacherOrAdmin
     write_permission_classes = [IsTeacherOrAdmin]
+    
+    def get_queryset(self):
+        """
+        Announcements are visible to all authenticated users (not filtered by role).
+        They are filtered by is_archived status to exclude archived announcements.
+        """
+        # Get base queryset without role-based filtering
+        qs = self.queryset if self.queryset is not None else super(BaseModelViewSet, self).get_queryset()
+        # Exclude archived announcements for all users
+        return qs.filter(is_archived=False)
+    
     def create(self, request, *args, **kwargs):
         """Wrap create to surface validation and unexpected errors clearly during development."""
         try:
@@ -1273,4 +1285,121 @@ class UserSettingsViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+
+
+class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet for activity logs - admin only access"""
+    serializer_class = ActivityLogSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        # Only admins can view activity logs
+        if self.request.user and self.request.user.role == 'admin':
+            try:
+                return ActivityLog.objects.all().order_by('-created_at')[:50]  # Last 50 activities
+            except Exception:
+                # Return empty queryset if database is unavailable
+                return ActivityLog.objects.none()
+        return ActivityLog.objects.none()
+
+
+class SystemAlertViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet for system alerts - admin only access"""
+    serializer_class = SystemAlertSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    
+    def get_queryset(self):
+        # Only admins can view system alerts
+        if self.request.user and self.request.user.role == 'admin':
+            try:
+                # Return active and recent alerts, sorted by severity then creation date
+                return SystemAlert.objects.all().order_by('-severity', '-created_at')[:20]
+            except Exception:
+                # Return empty queryset if database is unavailable
+                return SystemAlert.objects.none()
+        return SystemAlert.objects.none()
+
+
+class NotificationViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for user notifications.
+    
+    - Anonymous users cannot access notifications
+    - Authenticated users can see their own notifications
+    - Supports filtering by read status via query parameter: ?read=true|false
+    - Supports pagination via limit and offset query parameters
+    - Custom actions: mark-as-read/<id>/, mark-all-as-read/
+    """
+    serializer_class = NotificationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """
+        Get notifications for the current user, with optional filtering.
+        """
+        user = self.request.user
+        
+        try:
+            # Start with notifications for current user, ordered by creation date (newest first)
+            queryset = Notification.objects.filter(user=user).order_by('-created_at')
+            
+            # Filter by read status if provided
+            read_param = self.request.query_params.get('read', None)
+            if read_param is not None:
+                is_read = read_param.lower() in ['true', '1', 'yes']
+                queryset = queryset.filter(read=is_read)
+            
+            return queryset
+        except Exception:
+            # Return empty queryset if database is unavailable
+            return Notification.objects.none()
+    
+    @action(detail=True, methods=['post'])
+    def mark_as_read(self, request, pk=None):
+        """
+        Mark a specific notification as read.
+        """
+        try:
+            notification = self.get_object()
+            if notification.user != request.user:
+                return Response(
+                    {'detail': 'You can only mark your own notifications as read.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            notification.read = True
+            notification.read_at = timezone.now()
+            notification.save()
+            serializer = self.get_serializer(notification)
+            return Response(serializer.data)
+        except Notification.DoesNotExist:
+            return Response(
+                {'detail': 'Notification not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'detail': f'Error marking notification as read: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=False, methods=['post'])
+    def mark_all_as_read(self, request):
+        """
+        Mark all notifications for the current user as read.
+        """
+        try:
+            user = request.user
+            notifications = Notification.objects.filter(user=user, read=False)
+            count = notifications.update(read=True, read_at=timezone.now())
+            return Response({
+                'detail': f'Marked {count} notifications as read.',
+                'count': count
+            })
+        except Exception as e:
+            return Response(
+                {'detail': f'Error marking notifications as read: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
 

@@ -6,7 +6,7 @@ from .models import (
     Enrollment, LectureProgress, Assignment, AssignmentSubmission, AssignmentAttachment,
     Test, Question, TestSubmission, TestAnswer, AttendanceRecord,
     LibraryItem, LibraryFavorite, LibraryDownload, Event, Announcement, Upload,
-    StudentProfile, TeacherProfile, AdminProfile, UserSettings
+    StudentProfile, TeacherProfile, AdminProfile, UserSettings, ActivityLog, SystemAlert, Notification
 )
 from django.contrib.auth.password_validation import validate_password
 from django.db.models import Avg
@@ -36,7 +36,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ('id', 'username', 'email', 'first_name', 'last_name', 'role', 'avatar_url', 'bio', 'phone', 'date_joined')
+        fields = ('id', 'username', 'email', 'first_name', 'last_name', 'role', 'avatar_url', 'bio', 'phone', 'date_joined', 'last_login')
 
 
 class ChangePasswordSerializer(serializers.Serializer):
@@ -320,3 +320,42 @@ class UserSettingsSerializer(serializers.ModelSerializer):
         model = UserSettings
         fields = '__all__'
         read_only_fields = ('user', 'created_at', 'updated_at')
+
+
+class ActivityLogSerializer(serializers.ModelSerializer):
+    user_name = serializers.SerializerMethodField()
+    course_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = ActivityLog
+        fields = ('id', 'activity_type', 'title', 'description', 'user', 'user_name', 'course', 'course_name', 'metadata', 'created_at')
+        read_only_fields = ('created_at',)
+    
+    def get_user_name(self, obj):
+        if obj.user:
+            return f"{obj.user.first_name} {obj.user.last_name}".strip() or obj.user.username
+        return None
+    
+    def get_course_name(self, obj):
+        if obj.course:
+            return obj.course.title or obj.course.name
+        return None
+
+
+class SystemAlertSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SystemAlert
+        fields = ('id', 'alert_type', 'severity', 'status', 'title', 'description', 'affected_service', 'resolution_steps', 'affected_users_count', 'metadata', 'created_at', 'resolved_at')
+        read_only_fields = ('created_at',)
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    user_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Notification
+        fields = ('id', 'user', 'user_name', 'notification_type', 'title', 'message', 'related_object_type', 'related_object_id', 'read', 'created_at', 'read_at')
+        read_only_fields = ('created_at', 'read_at')
+    
+    def get_user_name(self, obj):
+        return obj.user.username if obj.user else None

@@ -2292,7 +2292,7 @@ export function EnhancedTestSystem({ userRole }) {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {visibleLeaderboard.slice(3).map((student, index) => (
+              {visibleLeaderboard.map((student, index) => (
                 <motion.div
                   key={student.rank}
                   initial={{ opacity: 0, x: -20 }}
@@ -2360,7 +2360,48 @@ export function EnhancedTestSystem({ userRole }) {
     );
   };
 
-  const StudentView = () => (
+  const StudentView = () => {
+    // Calculate average score for the student
+    const calculateAverageScore = () => {
+      if (!currentUser || completedTests.length === 0) return 0;
+      
+      const uid = currentUser.id || currentUser.pk || currentUser.user_id;
+      let totalPercentage = 0;
+      let count = 0;
+      
+      completedTests.forEach(test => {
+        if (test.submissions) {
+          const userSubmission = test.submissions.find(s => {
+            const sid = s.studentId || s.student_id || s.student || s.user_id || s.user;
+            return sid === uid || sid === String(uid) || String(sid) === String(uid);
+          });
+          
+          if (userSubmission && userSubmission.percentage != null) {
+            totalPercentage += safeNumber(userSubmission.percentage);
+            count++;
+          }
+        }
+      });
+      
+      return count > 0 ? Math.round(totalPercentage / count) : 0;
+    };
+    
+    // Get student's rank from leaderboard
+    const getStudentRank = () => {
+      if (!currentUser) return null;
+      
+      const uid = currentUser.id || currentUser.pk || currentUser.user_id;
+      const studentEntry = leaderboardData.find(entry => {
+        return entry.id === uid || entry.id === String(uid) || String(entry.id) === String(uid);
+      });
+      
+      return studentEntry ? studentEntry.rank : null;
+    };
+    
+    const averageScore = calculateAverageScore();
+    const studentRank = getStudentRank();
+    
+    return (
     <div className="space-y-6">
       {/* Student Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -2374,14 +2415,16 @@ export function EnhancedTestSystem({ userRole }) {
         <Card>
           <CardContent className="p-4 text-center">
             <Target className="h-8 w-8 text-green-600 mx-auto mb-2" />
-            <div className="text-2xl font-bold">0%</div>
+            <div className="text-2xl font-bold">{averageScore}%</div>
             <div className="text-sm text-muted-foreground">Average Score</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 text-center">
             <Crown className="h-8 w-8 text-purple-600 mx-auto mb-2" />
-            <div className="text-2xl font-bold">N/A</div>
+            <div className="text-2xl font-bold">
+              {studentRank ? `#${studentRank}` : 'N/A'}
+            </div>
             <div className="text-sm text-muted-foreground">Class Rank</div>
           </CardContent>
         </Card>
@@ -2583,12 +2626,195 @@ export function EnhancedTestSystem({ userRole }) {
                 <CardTitle>Performance Trends</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="h-64 flex items-center justify-center bg-gray-50 rounded">
-                  <div className="text-center">
-                    <BarChart3 className="h-12 w-12 text-gray-400 mx-auto mb-2" />
-                    <p className="text-gray-500">Score trends over time</p>
-                  </div>
-                </div>
+                {(() => {
+                  // Get student's test performance over time
+                  const uid = currentUser && (currentUser.id || currentUser.pk || currentUser.user_id);
+                  const testPerformance = [];
+                  
+                  if (uid && completedTests.length > 0) {
+                    completedTests.forEach(test => {
+                      if (test.submissions) {
+                        const userSubmission = test.submissions.find(s => {
+                          const sid = s.studentId || s.student_id || s.student || s.user_id || s.user;
+                          return sid === uid || sid === String(uid) || String(sid) === String(uid);
+                        });
+                        
+                        if (userSubmission && userSubmission.percentage != null) {
+                          testPerformance.push({
+                            title: test.title,
+                            subject: test.subject,
+                            percentage: safeNumber(userSubmission.percentage),
+                            date: test.scheduledDate
+                          });
+                        }
+                      }
+                    });
+                  }
+
+                  if (testPerformance.length === 0) {
+                    return (
+                      <div className="h-64 flex items-center justify-center bg-gray-50 rounded">
+                        <div className="text-center">
+                          <BarChart3 className="h-12 w-12 text-gray-400 mx-auto mb-2" />
+                          <p className="text-gray-500">No test data available yet</p>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // Calculate max score for scaling
+                  const maxScore = 100; // Always use 100 as max for consistent scaling
+                  
+                  return (
+                    <div className="space-y-4">
+                      {/* Line Chart Visualization */}
+                      <div className="relative h-52 bg-gradient-to-b from-blue-50 to-white rounded-lg p-4 border border-gray-200">
+                        {/* Y-axis labels */}
+                        <div className="absolute left-0 top-0 h-full flex flex-col justify-between text-xs text-gray-500 pr-2">
+                          <span>100%</span>
+                          <span>75%</span>
+                          <span>50%</span>
+                          <span>25%</span>
+                          <span>0%</span>
+                        </div>
+                        
+                        {/* Grid lines */}
+                        <div className="absolute left-12 right-4 top-4 bottom-8 flex flex-col justify-between">
+                          {[0, 1, 2, 3, 4].map(i => (
+                            <div key={i} className="border-t border-gray-200"></div>
+                          ))}
+                        </div>
+                        
+                        {/* Chart area */}
+                        <div className="relative ml-12 mr-4 h-[calc(100%-2rem)]">
+                          <svg className="w-full h-full" preserveAspectRatio="none">
+                            {/* Line path */}
+                            <motion.path
+                              d={(() => {
+                                const width = 100;
+                                const height = 100;
+                                const points = testPerformance.map((test, i) => {
+                                  const x = (i / Math.max(testPerformance.length - 1, 1)) * width;
+                                  const y = height - (test.percentage / maxScore * height);
+                                  return `${x},${y}`;
+                                });
+                                return `M ${points.join(' L ')}`;
+                              })()}
+                              fill="none"
+                              stroke="url(#lineGradient)"
+                              strokeWidth="3"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              initial={{ pathLength: 0, opacity: 0 }}
+                              animate={{ pathLength: 1, opacity: 1 }}
+                              transition={{ duration: 1.5, ease: "easeInOut" }}
+                              vectorEffect="non-scaling-stroke"
+                            />
+                            
+                            {/* Area fill under line */}
+                            <motion.path
+                              d={(() => {
+                                const width = 100;
+                                const height = 100;
+                                const points = testPerformance.map((test, i) => {
+                                  const x = (i / Math.max(testPerformance.length - 1, 1)) * width;
+                                  const y = height - (test.percentage / maxScore * height);
+                                  return `${x},${y}`;
+                                });
+                                return `M 0,${height} L ${points.join(' L ')} L ${width},${height} Z`;
+                              })()}
+                              fill="url(#areaGradient)"
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 0.3 }}
+                              transition={{ duration: 1, delay: 0.5 }}
+                            />
+                            
+                            {/* Data points */}
+                            {testPerformance.map((test, index) => {
+                              const x = (index / Math.max(testPerformance.length - 1, 1)) * 100;
+                              const y = 100 - (test.percentage / maxScore * 100);
+                              return (
+                                <motion.g key={index}>
+                                  <motion.circle
+                                    cx={`${x}%`}
+                                    cy={`${y}%`}
+                                    r="4"
+                                    fill="white"
+                                    stroke="#3b82f6"
+                                    strokeWidth="2"
+                                    initial={{ scale: 0, opacity: 0 }}
+                                    animate={{ scale: 1, opacity: 1 }}
+                                    transition={{ delay: 0.8 + index * 0.1, duration: 0.3 }}
+                                    className="cursor-pointer hover:r-6 transition-all"
+                                  />
+                                  <title>{`${test.title}: ${test.percentage}%`}</title>
+                                </motion.g>
+                              );
+                            })}
+                            
+                            {/* Gradients */}
+                            <defs>
+                              <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" stopColor="#3b82f6" />
+                                <stop offset="100%" stopColor="#8b5cf6" />
+                              </linearGradient>
+                              <linearGradient id="areaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" stopColor="#3b82f6" />
+                                <stop offset="100%" stopColor="#dbeafe" />
+                              </linearGradient>
+                            </defs>
+                          </svg>
+                        </div>
+                        
+                        {/* X-axis labels */}
+                        <div className="absolute bottom-0 left-12 right-4 flex justify-between text-xs text-gray-500 mt-2">
+                          {testPerformance.map((test, index) => (
+                            <span key={index} className="truncate max-w-[60px]" title={test.title}>
+                              Test {index + 1}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      {/* Test labels */}
+                      <div className="space-y-2 max-h-32 overflow-y-auto">
+                        {testPerformance.map((test, index) => (
+                          <div key={index} className="flex items-center gap-2 text-sm">
+                            <div className={`h-3 w-3 rounded-full ${
+                              test.percentage >= 80 ? 'bg-green-500' :
+                              test.percentage >= 60 ? 'bg-blue-500' :
+                              test.percentage >= 40 ? 'bg-yellow-500' : 'bg-red-500'
+                            }`} />
+                            <span className="flex-1 truncate" title={test.title}>
+                              {test.title.length > 25 ? test.title.substring(0, 25) + '...' : test.title}
+                            </span>
+                            <span className="text-muted-foreground">{test.percentage}%</span>
+                          </div>
+                        ))}
+                      </div>
+                      
+                      {/* Summary stats */}
+                      <div className="pt-3 border-t grid grid-cols-3 gap-2 text-center">
+                        <div>
+                          <div className="text-xs text-muted-foreground">Tests</div>
+                          <div className="font-bold">{testPerformance.length}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-muted-foreground">Average</div>
+                          <div className="font-bold text-blue-600">
+                            {Math.round(testPerformance.reduce((sum, t) => sum + t.percentage, 0) / testPerformance.length)}%
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-muted-foreground">Best</div>
+                          <div className="font-bold text-green-600">
+                            {Math.max(...testPerformance.map(t => t.percentage))}%
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
             <Card>
@@ -2596,31 +2822,80 @@ export function EnhancedTestSystem({ userRole }) {
                 <CardTitle>Subject Performance</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {[
-                    { subject: 'N/A', score: 0, tests: 0, color: 'bg-blue-500' },
-                    { subject: 'N/A', score: 0, tests: 0, color: 'bg-green-500' },
-                    { subject: 'N/A', score: 0, tests: 0, color: 'bg-purple-500' }
-                  ].map((subject, index) => (
-                    <div key={index} className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="font-medium">{subject.subject}</span>
-                        <span className="text-sm text-muted-foreground">{subject.tests} tests</span>
+                {(() => {
+                  // Calculate subject-wise performance
+                  const uid = currentUser && (currentUser.id || currentUser.pk || currentUser.user_id);
+                  const subjectStats = new Map();
+                  
+                  if (uid && completedTests.length > 0) {
+                    completedTests.forEach(test => {
+                      if (test.submissions && test.subject) {
+                        const userSubmission = test.submissions.find(s => {
+                          const sid = s.studentId || s.student_id || s.student || s.user_id || s.user;
+                          return sid === uid || sid === String(uid) || String(sid) === String(uid);
+                        });
+                        
+                        if (userSubmission && userSubmission.percentage != null) {
+                          if (!subjectStats.has(test.subject)) {
+                            subjectStats.set(test.subject, { total: 0, count: 0, subject: test.subject });
+                          }
+                          const stats = subjectStats.get(test.subject);
+                          stats.total += safeNumber(userSubmission.percentage);
+                          stats.count += 1;
+                        }
+                      }
+                    });
+                  }
+
+                  const subjectData = Array.from(subjectStats.values()).map((stats, index) => ({
+                    subject: stats.subject,
+                    score: Math.round(stats.total / stats.count),
+                    tests: stats.count,
+                    color: ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-orange-500', 'bg-pink-500'][index % 5]
+                  }));
+
+                  if (subjectData.length === 0) {
+                    return (
+                      <div className="h-64 flex items-center justify-center bg-gray-50 rounded">
+                        <div className="text-center">
+                          <Target className="h-12 w-12 text-gray-400 mx-auto mb-2" />
+                          <p className="text-gray-500">No subject data available yet</p>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <Progress value={subject.score} className="flex-1" />
-                        <span className="font-bold text-sm w-12">{subject.score}%</span>
-                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-4">
+                      {subjectData.map((subject, index) => (
+                        <motion.div
+                          key={subject.subject}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: index * 0.1 }}
+                          className="space-y-2"
+                        >
+                          <div className="flex justify-between items-center">
+                            <span className="font-medium">{subject.subject}</span>
+                            <span className="text-sm text-muted-foreground">{subject.tests} test{subject.tests !== 1 ? 's' : ''}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Progress value={subject.score} className="flex-1" />
+                            <span className="font-bold text-sm w-12">{subject.score}%</span>
+                          </div>
+                        </motion.div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  );
+                })()}
               </CardContent>
             </Card>
           </div>
         </TabsContent>
       </Tabs>
     </div>
-  );
+    );
+  };
 
   const TeacherView = () => (
     <AnimatePresence mode="wait">
