@@ -429,10 +429,6 @@ export async function createStudyMaterial(payload) {
   return await request('/study-materials/', { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'application/json' } });
 }
 
-export async function createCourseSchedule(payload) {
-  return await request('/course-schedules/', { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'application/json' } });
-}
-
 export async function updateStudyMaterial(id, payload) {
   return await request(`/study-materials/${id}/`, { method: 'PATCH', body: JSON.stringify(payload), headers: { 'Content-Type': 'application/json' } });
 }
@@ -698,7 +694,6 @@ export default {
   getStudyMaterials,
   createStudyMaterial,
   updateStudyMaterial,
-  createCourseSchedule,
   uploadFile,
   createAssignment,
   updateAssignment,

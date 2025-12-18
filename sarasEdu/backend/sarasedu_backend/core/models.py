@@ -110,18 +110,6 @@ class LectureMaterial(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
 
-class CourseSchedule(models.Model):
-    SESSION_CHOICES = (('Lecture', 'Lecture'), ('Lab Session', 'Lab Session'), ('Tutorial', 'Tutorial'), ('Discussion', 'Discussion'))
-    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='schedules')
-    day_of_week = models.CharField(max_length=20)
-    start_time = models.TimeField()
-    end_time = models.TimeField()
-    session_type = models.CharField(max_length=50, choices=SESSION_CHOICES, blank=True, null=True)
-    room_number = models.CharField(max_length=50, blank=True, null=True)
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-
 class StudyMaterial(models.Model):
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='study_materials')
     title = models.CharField(max_length=255)

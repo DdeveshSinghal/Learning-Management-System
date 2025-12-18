@@ -14,7 +14,7 @@ import traceback
 import logging
 from django.utils.text import get_valid_filename
 from .models import (
-    Course, Lecture, LectureMaterial, CourseSchedule, StudyMaterial,
+    Course, Lecture, LectureMaterial, StudyMaterial,
     LiveClass,
     Enrollment, LectureProgress, Assignment, AssignmentSubmission, AssignmentAttachment,
     Test, Question, TestSubmission, TestAnswer, AttendanceRecord,
@@ -24,7 +24,7 @@ from .models import (
 
 User = get_user_model()
 from .serializers import (
-    CourseSerializer, LectureSerializer, LectureMaterialSerializer, CourseScheduleSerializer, StudyMaterialSerializer,
+    CourseSerializer, LectureSerializer, LectureMaterialSerializer, StudyMaterialSerializer,
     LiveClassSerializer,
     EnrollmentSerializer, LectureProgressSerializer, AssignmentSerializer, AssignmentSubmissionSerializer, AssignmentAttachmentSerializer,
     TestSerializer, QuestionSerializer, TestSubmissionSerializer, TestAnswerSerializer, AttendanceRecordSerializer,
@@ -268,11 +268,6 @@ class LectureViewSet(BaseModelViewSet):
 class LectureMaterialViewSet(BaseModelViewSet):
     queryset = LectureMaterial.objects.all()
     serializer_class = LectureMaterialSerializer
-
-
-class CourseScheduleViewSet(BaseModelViewSet):
-    queryset = CourseSchedule.objects.all()
-    serializer_class = CourseScheduleSerializer
 
 
 class StudyMaterialViewSet(BaseModelViewSet):

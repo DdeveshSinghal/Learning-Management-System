@@ -51,12 +51,10 @@ import {
 
     const [lectures, setLectures] = useState([]);
     const [studyMaterials, setStudyMaterials] = useState([]);
-    const [schedule, setSchedule] = useState([]);
 
     // Dialogs / form state for creating items
     const [isLectureDialogOpen, setIsLectureDialogOpen] = useState(false);
     const [isMaterialDialogOpen, setIsMaterialDialogOpen] = useState(false);
-    const [isScheduleDialogOpen, setIsScheduleDialogOpen] = useState(false);
 
     const [newLecture, setNewLecture] = useState({
       title: '',
@@ -78,15 +76,6 @@ import {
       description: ''
     });
 
-    const [newSchedule, setNewSchedule] = useState({
-      day_of_week: 'Monday',
-      start_time: '',
-      end_time: '',
-      session_type: 'Lecture',
-      room_number: '',
-      is_active: true
-    });
-
     const handleCreateLecture = () => {
       const id = Date.now();
       setLectures(prev => [...prev, { id, order_index: prev.length + 1, ...newLecture, materials: [] }]);
@@ -100,15 +89,6 @@ import {
       setIsMaterialDialogOpen(false);
       setNewStudyMaterial({ title: '', file_url: '', file_type: '', file_size_kb: '', category: '', description: '' });
     };
-
-    const handleCreateSchedule = () => {
-      const id = Date.now();
-      setSchedule(prev => [...prev, { id, ...newSchedule }]);
-      setIsScheduleDialogOpen(false);
-      setNewSchedule({ day_of_week: 'Monday', start_time: '', end_time: '', session_type: 'Lecture', room_number: '', is_active: true });
-    };
-  
-  
 
     const [isSaving, setIsSaving] = useState(false);
 
@@ -173,17 +153,6 @@ import {
             await api.createStudyMaterial(matPayload);
           } catch (e) {
             console.error('Failed to create study material', e);
-          }
-        }
-
-        // persist schedules
-        for (const slot of schedule) {
-          try {
-            const slotPayload = Object.assign({}, slot, { course: courseId });
-            delete slotPayload.id;
-            await api.createCourseSchedule(slotPayload);
-          } catch (e) {
-            console.error('Failed to create schedule slot', e);
           }
         }
 
@@ -503,55 +472,6 @@ import {
       </div>
     );
 
-    const ScheduleTab = () => (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold">Class Schedule</h3>
-          <Button onClick={() => setIsScheduleDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Schedule
-          </Button>
-        </div>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="space-y-4">
-              {schedule.map((slot) => (
-                <div key={slot.id} className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center">
-                      <Calendar className="h-6 w-6 text-blue-600" />
-                    </div>
-                    <div>
-                      <h4 className="font-medium">{slot.day_of_week}</h4>
-                      <p className="text-sm text-muted-foreground">{slot.start_time} - {slot.end_time}</p>
-                    </div>
-                  </div>
-                
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <Badge variant="outline">{slot.session_type}</Badge>
-                      <p className="text-sm text-muted-foreground mt-1">{slot.room_number}</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline">
-                        <Edit className="h-3 w-3" />
-                      </Button>
-                      <Button size="sm" variant="outline" className="text-red-600">
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  
-
-
     return (
       <div className="space-y-6">
         {/* Header */}
@@ -598,11 +518,10 @@ import {
 
         {/* Course Creation Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="basic">Basic Info</TabsTrigger>
             <TabsTrigger value="lectures">Lectures</TabsTrigger>
             <TabsTrigger value="materials">Materials</TabsTrigger>
-            <TabsTrigger value="schedule">Schedule</TabsTrigger>
           </TabsList>
 
           <TabsContent value="basic">
@@ -615,10 +534,6 @@ import {
 
           <TabsContent value="materials">
             <MaterialsTab />
-          </TabsContent>
-
-          <TabsContent value="schedule">
-            <ScheduleTab />
           </TabsContent>
         </Tabs>
 
@@ -701,66 +616,6 @@ import {
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsMaterialDialogOpen(false)}>Cancel</Button>
                 <Button onClick={handleCreateStudyMaterial} className="bg-[#F59E0B]">Create Material</Button>
-              </DialogFooter>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog open={isScheduleDialogOpen} onOpenChange={setIsScheduleDialogOpen}>
-          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Add Schedule</DialogTitle>
-              <DialogDescription>Define recurring class sessions for this course.</DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-3 mt-4">
-              <Label>Day of Week</Label>
-              <Select value={newSchedule.day_of_week} onValueChange={(v) => setNewSchedule(prev => ({ ...prev, day_of_week: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Monday">Monday</SelectItem>
-                  <SelectItem value="Tuesday">Tuesday</SelectItem>
-                  <SelectItem value="Wednesday">Wednesday</SelectItem>
-                  <SelectItem value="Thursday">Thursday</SelectItem>
-                  <SelectItem value="Friday">Friday</SelectItem>
-                  <SelectItem value="Saturday">Saturday</SelectItem>
-                  <SelectItem value="Sunday">Sunday</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>Start Time</Label>
-                  <Input type="time" value={newSchedule.start_time} onChange={(e) => setNewSchedule(prev => ({ ...prev, start_time: e.target.value }))} />
-                </div>
-                <div>
-                  <Label>End Time</Label>
-                  <Input type="time" value={newSchedule.end_time} onChange={(e) => setNewSchedule(prev => ({ ...prev, end_time: e.target.value }))} />
-                </div>
-              </div>
-
-              <Label>Session Type</Label>
-              <Select value={newSchedule.session_type} onValueChange={(v) => setNewSchedule(prev => ({ ...prev, session_type: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Lecture">Lecture</SelectItem>
-                  <SelectItem value="Lab Session">Lab Session</SelectItem>
-                  <SelectItem value="Tutorial">Tutorial</SelectItem>
-                  <SelectItem value="Discussion">Discussion</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Label>Room Number</Label>
-              <Input value={newSchedule.room_number} onChange={(e) => setNewSchedule(prev => ({ ...prev, room_number: e.target.value }))} />
-
-              <div className="flex items-center gap-3 mt-2">
-                <Switch checked={!!newSchedule.is_active} onCheckedChange={(v) => setNewSchedule(prev => ({ ...prev, is_active: v }))} />
-                <span>Active</span>
-              </div>
-
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsScheduleDialogOpen(false)}>Cancel</Button>
-                <Button onClick={handleCreateSchedule} className="bg-[#F59E0B]">Create Schedule</Button>
               </DialogFooter>
             </div>
           </DialogContent>

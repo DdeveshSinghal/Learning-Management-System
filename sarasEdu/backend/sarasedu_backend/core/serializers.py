@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import (
-    Course, Lecture, LectureMaterial, CourseSchedule, StudyMaterial,
+    Course, Lecture, LectureMaterial, StudyMaterial,
     LiveClass,
     Enrollment, LectureProgress, Assignment, AssignmentSubmission, AssignmentAttachment,
     Test, Question, TestSubmission, TestAnswer, AttendanceRecord,
@@ -87,12 +87,6 @@ class LectureSerializer(serializers.ModelSerializer):
 class LectureMaterialSerializer(serializers.ModelSerializer):
     class Meta:
         model = LectureMaterial
-        fields = '__all__'
-
-
-class CourseScheduleSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CourseSchedule
         fields = '__all__'
 
 
