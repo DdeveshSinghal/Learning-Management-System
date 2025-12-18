@@ -40,6 +40,12 @@ export function SimpleCourses({ userRole }) {
   const [ratingDialogOpen, setRatingDialogOpen] = useState(null);
   const [tempRating, setTempRating] = useState(0);
   const [tempReview, setTempReview] = useState('');
+  const apiBase = (
+    import.meta.env?.VITE_API_BASE_URL ||
+    import.meta.env?.VITE_API_BASE ||
+    'http://localhost:8000/api'
+  ).replace(/\/+$|^\s+|\s+$/g, '');
+  const assetBase = apiBase.replace(/\/api\/?$/, '') || (typeof window !== 'undefined' ? window.location.origin : '');
 
   useEffect(() => {
     let mounted = true;
@@ -262,15 +268,14 @@ export function SimpleCourses({ userRole }) {
                   try {
                     const url = new URL(u);
                     const host = url.host || '';
-                    if (host.includes('drive.google.com')) {
-                      // Try to extract file id from /file/d/ID or ?id=ID
-                      const m = u.match(/\/d\/([a-zA-Z0-9_-]+)/);
-                      if (m && m[1]) return `https://drive.google.com/uc?export=view&id=${m[1]}`;
-                      const q = url.searchParams.get('id');
-                      if (q) return `https://drive.google.com/uc?export=view&id=${q}`;
-                      // fallback: if contains "open?id=" pattern
-                      const m2 = u.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-                      if (m2 && m2[1]) return `https://drive.google.com/uc?export=view&id=${m2[1]}`;
+                    if (host.includes('drive.google.com') || host.includes('docs.google.com')) {
+                      // Extract file id from typical Drive patterns
+                      const m = u.match(/\/d\/([a-zA-Z0-9_-]+)/) || u.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+                      const id = m && m[1] ? m[1] : url.searchParams.get('id');
+                      if (id) {
+                        // googleusercontent is more reliable for direct image fetch than uc view
+                        return `https://lh3.googleusercontent.com/d/${id}`;
+                      }
                     }
                   } catch (e) {
                     // ignore URL parse errors
@@ -278,7 +283,21 @@ export function SimpleCourses({ userRole }) {
                   return u;
                 };
 
-                const src = transformDriveUrl(raw);
+                const normalizeImageUrl = (u) => {
+                  if (!u) return '';
+                  const driveSafe = transformDriveUrl(u.trim());
+                  if (!driveSafe) return '';
+                  if (/^https?:\/\//i.test(driveSafe) || driveSafe.startsWith('data:')) return driveSafe;
+                  if (driveSafe.startsWith('//')) {
+                    return `${window.location?.protocol || 'https:'}${driveSafe}`;
+                  }
+                  const base = assetBase || apiBase;
+                  if (!base) return driveSafe;
+                  if (driveSafe.startsWith('/')) return `${base}${driveSafe}`;
+                  return `${base}/${driveSafe}`;
+                };
+
+                const src = normalizeImageUrl(raw);
                 if (!src) {
                   return (
                     <div className="w-full h-full bg-gray-100 rounded-t-lg flex items-center justify-center">

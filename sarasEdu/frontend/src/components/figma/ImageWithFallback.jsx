@@ -7,6 +7,8 @@ export function ImageWithFallback(props) {
   const [didError, setDidError] = useState(false)
 
   const handleError = () => {
+    // Log broken source for quick diagnosis (network / CORS / 404)
+    console.warn('Image load failed for src:', src)
     setDidError(true)
   }
 
@@ -22,6 +24,16 @@ export function ImageWithFallback(props) {
       </div>
     </div>
   ) : (
-    <img src={src} alt={alt} className={className} style={style} {...rest} onError={handleError} data-debug-src={src} title={src} />
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      style={style}
+      {...rest}
+      onError={handleError}
+      data-debug-src={src}
+      title={src}
+      referrerPolicy="no-referrer"
+    />
   )
 }
