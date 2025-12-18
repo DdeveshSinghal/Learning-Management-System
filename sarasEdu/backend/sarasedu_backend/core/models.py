@@ -152,7 +152,7 @@ class LectureProgress(models.Model):
 
 
 class Assignment(models.Model):
-    STATUS = (('active', 'Active'), ('archived', 'Archived'), ('draft', 'Draft'))
+    STATUS = (('active', 'Active'), ('overdue', 'Overdue'))  # Status is stored in DB; 'overdue' is set when due_date passes
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='assignments')
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)

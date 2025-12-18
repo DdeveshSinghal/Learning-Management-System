@@ -67,7 +67,8 @@ export function AssignmentSystem({ userRole }) {
       // Use the server-provided status and due_date as-is (show DB values)
       const arr = data || [];
       setAssignments(arr);
-      // For student users, build a map of assignmentId -> submission (if any)
+      
+      // For student users, build a map of assignmentId -> submission (student's own submission)
       if (userRole === 'student') {
         const map = {};
         await Promise.all(arr.map(async (a) => {
@@ -78,27 +79,65 @@ export function AssignmentSystem({ userRole }) {
             if (subs && typeof subs === 'object' && !Array.isArray(subs)) {
               if (Array.isArray(subs.results)) subs = subs.results;
               else {
-                // single submission object
-                map[a.id] = subs;
+                // single submission object - verify it belongs to this assignment
+                if (String(subs.assignment) === String(a.id) || subs.assignment === a.id) {
+                  map[a.id] = subs;
+                }
                 return;
               }
             }
             if (Array.isArray(subs) && subs.length > 0) {
+              // Filter to only submissions for this specific assignment
+              const assignmentSubs = subs.filter(s => String(s.assignment) === String(a.id) || s.assignment === a.id);
+              if (assignmentSubs.length === 0) return; // No submissions for this assignment
+              
               // prefer the latest by submission_date if multiple
               try {
-                subs.sort((x, y) => {
+                assignmentSubs.sort((x, y) => {
                   const dx = new Date(x.submission_date || x.submitted_at || x.created_at || 0).getTime() || 0;
                   const dy = new Date(y.submission_date || y.submitted_at || y.created_at || 0).getTime() || 0;
                   return dy - dx;
                 });
               } catch (e) { /* ignore sort errors */ }
-              map[a.id] = subs[0];
+              map[a.id] = assignmentSubs[0];
             }
           } catch (e) {
             // ignore per-assignment fetch errors
           }
         }));
         setMySubmissionsMap(map);
+      } else if (userRole === 'teacher') {
+        // For teacher users, build a map of assignmentId -> hasSubmissions (check if ANY student submitted)
+        const submissionMap = {};
+        await Promise.all(arr.map(async (a) => {
+          try {
+            let subs = await api.getAssignmentSubmissions(a.id);
+            if (!subs) return;
+            
+            // Normalize response (handle array, paginated, or single object)
+            if (!Array.isArray(subs)) {
+              if (subs.results && Array.isArray(subs.results)) {
+                subs = subs.results;
+              } else {
+                subs = [subs];
+              }
+            }
+            
+            // Check if ANY valid submissions exist for this assignment
+            const validSubs = subs.filter(s => {
+              const belongsToAssignment = String(s.assignment) === String(a.id) || s.assignment === a.id;
+              const hasSubmittedContent = s.submitted_file || s.submitted_file_url || s.submission_text || s.submissionText || s.submitted_text;
+              return belongsToAssignment && hasSubmittedContent;
+            });
+            
+            if (validSubs && validSubs.length > 0) {
+              submissionMap[a.id] = true; // Mark that submissions exist for this assignment
+            }
+          } catch (e) {
+            // ignore per-assignment fetch errors
+          }
+        }));
+        setMySubmissionsMap(submissionMap); // Reuse for teacher: maps assignment.id -> hasSubmissions
       }
     } catch (err) {
       console.error('Failed to load assignments', err);
@@ -280,9 +319,9 @@ function CreateAssignmentDialog({ open, onOpenChange, onCreated, initial = null,
           
             <div className="flex gap-2">
             <Button type="button" className="flex-1" onClick={async () => {
-              // Validate required fields for publishing
+              // Validate required fields before creating assignment
               if (!title || !selectedCourse || !dueDate || !totalMarks) {
-                alert('Please provide title, course, due date and total marks before publishing');
+                alert('Please provide title, course, due date and total marks before creating assignment');
                 return;
               }
 
@@ -294,7 +333,7 @@ function CreateAssignmentDialog({ open, onOpenChange, onCreated, initial = null,
                     return Object.entries(err.data).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join('\n');
                   }
                 } catch (e) { /* ignore */ }
-                return err?.message || 'Failed to create assignment';
+                return err?.message || (isEditing ? 'Failed to update assignment' : 'Failed to create assignment');
               };
 
               try {
@@ -308,8 +347,7 @@ function CreateAssignmentDialog({ open, onOpenChange, onCreated, initial = null,
                 fd.append('total_marks', totalMarks);
                 if (wordLimit) fd.append('word_limit', wordLimit);
                 if (allowedFileTypes && allowedFileTypes.length) fd.append('allowed_file_types', JSON.stringify(allowedFileTypes));
-                // Do not append raw files here; upload them separately after assignment is created
-                // backend expects one of: 'active', 'archived', 'draft'
+                // Always set status to 'active'; 'overdue' is computed dynamically on backend
                 fd.append('status', 'active');
 
                 if (isEditing && initial && initial.id) {
@@ -346,60 +384,6 @@ function CreateAssignmentDialog({ open, onOpenChange, onCreated, initial = null,
             }} disabled={creating}>
                 {creating ? (isEditing ? 'Updating...' : 'Creating...') : (isEditing ? 'Update Assignment' : 'Create Assignment')}
             </Button>
-            <Button type="button" variant="outline" className="flex-1" onClick={async () => {
-              // Save draft: allow missing due_date/total_marks but require title and course
-              if (!title || !selectedCourse) { alert('Please provide a title and select a course'); return; }
-
-              const serializeError = (err) => {
-                try {
-                  if (err && err.data) {
-                    if (typeof err.data === 'string') return err.data;
-                    if (err.data.detail) return err.data.detail;
-                    return Object.entries(err.data).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join('\n');
-                  }
-                } catch (e) { /* ignore */ }
-                return err?.message || 'Failed to save draft';
-              };
-
-              try {
-                setCreating(true);
-                const fd = new FormData();
-                fd.append('title', title);
-                fd.append('course', selectedCourse);
-                fd.append('description', description);
-                fd.append('instructions', instructions);
-                if (dueDate) fd.append('due_date', dueDate);
-                if (totalMarks) fd.append('total_marks', totalMarks);
-                if (wordLimit) fd.append('word_limit', wordLimit);
-                if (allowedFileTypes && allowedFileTypes.length) fd.append('allowed_file_types', JSON.stringify(allowedFileTypes));
-                // Do not append raw files here; upload separately after create
-                fd.append('status', 'draft');
-
-                if (isEditing && initial && initial.id) {
-                  await api.updateAssignment(initial.id, fd);
-                } else {
-                  const createdDraft = await api.createAssignment(fd);
-                  if (attachments && attachments.length) {
-                    try {
-                      await Promise.all(attachments.map(async (u) => {
-                        const name = (u && u.split && u.split('/').pop()) || u;
-                        await api.createAssignmentAttachment({ assignment: createdDraft.id, file_name: name, file_url: u, file_size_kb: null });
-                      }));
-                    } catch (e) { console.warn('Failed to create attachments for draft', e, e && e.data ? e.data : null); }
-                  }
-                }
-
-                setCreating(false);
-                onOpenChange(false);
-                if (onCreated) await onCreated();
-              } catch (err) {
-                console.error(err);
-                setCreating(false);
-                alert(serializeError(err));
-              }
-            }}>
-              Save as Draft
-            </Button>
           </div>
         </div>
         </form>
@@ -428,48 +412,37 @@ function CreateAssignmentDialog({ open, onOpenChange, onCreated, initial = null,
     }
   };
 
-  // For student users, allow per-student visible status derived from their submission
+  // Compute visible status based on core_assignmentsubmission and core_assignment table data
+  // For students: 
+  //   1. Graded: submission exists with status='graded'
+  //   2. Submitted: submission exists with status='submitted'
+  //   3. Overdue: no submission AND assignment.status='overdue'
+  //   4. Active: no submission AND assignment.status='active'
   const getVisibleStatus = (assignment) => {
     try {
-      const dueDate = getDueDate(assignment);
-      const overdue = isOverdue(dueDate);
-      const baseStatus = (assignment.status || 'active').toLowerCase();
-
-      // Student-specific visibility: prefer the student's own submission state
+      // Student-specific visibility: check submission status first, then assignment status
       if (userRole === 'student') {
         const sub = mySubmissionsMap && mySubmissionsMap[assignment.id] ? mySubmissionsMap[assignment.id] : null;
+        
         if (sub) {
           const sStatus = (sub.status || '').toLowerCase();
-          // If teacher has graded this submission, show as graded
-          if (sStatus === 'graded' || sub.grade != null || sub.marks_obtained != null || sub.marks != null) return 'graded';
-          // If submission exists but not graded, show as submitted
-          if (sStatus === 'submitted' || sub.submitted_at || sub.submission_date || sub.submitted_file || sub.submitted_file_url) return 'submitted';
+          // Check submission table status field
+          if (sStatus === 'graded') return 'graded';
+          if (sStatus === 'submitted') return 'submitted';
         }
 
-        // No student submission: check priority order
-        // 1. If assignment is marked as graded, show as graded
-        if (baseStatus === 'graded') return 'graded';
-        
-        // 2. If due date has passed and there's no submission, mark overdue
-        if (overdue) return 'overdue';
-
-        // 3. If not overdue, show as active (or use database status if it's draft/archived)
-        if (baseStatus === 'draft' || baseStatus === 'archived') return baseStatus;
+        // No submission record found - check assignment status from database
+        const assignmentStatus = (assignment.status || 'active').toLowerCase();
+        if (assignmentStatus === 'overdue') return 'overdue';
         return 'active';
       }
 
-      // Teacher or other roles: prioritize based on due date and graded status
-      // 1. If assignment is graded, show as graded
-      if (baseStatus === 'graded') return 'graded';
-      
-      // 2. If due date has passed, show as overdue regardless of database status
-      if (overdue) return 'overdue';
-      
-      // 3. If not overdue and not graded, show as active (or use database status if it's draft/archived)
-      if (baseStatus === 'draft' || baseStatus === 'archived') return baseStatus;
+      // Teacher or other roles: show based on assignment status
+      const assignmentStatus = (assignment.status || 'active').toLowerCase();
+      if (assignmentStatus === 'overdue') return 'overdue';
       return 'active';
     } catch (e) {
-      return assignment.status || 'active';
+      return 'active';
     }
   };
 
@@ -494,15 +467,32 @@ function CreateAssignmentDialog({ open, onOpenChange, onCreated, initial = null,
 
     for (const assignment of assignments) {
       try {
-        const vis = getVisibleStatus(assignment) || (assignment.status || 'active').toLowerCase();
-        map[assignment.id] = vis;
-        if (vis === 'active') act.push(assignment);
-        else if (vis === 'submitted') subm.push(assignment);
-        else if (vis === 'graded') grad.push(assignment);
-        else if (vis === 'overdue') over.push(assignment);
-        else {
-          // treat unknown statuses as active
-          act.push(assignment);
+        if (userRole === 'student') {
+          // Student logic: use submission status from database
+          const vis = getVisibleStatus(assignment) || (assignment.status || 'active').toLowerCase();
+          map[assignment.id] = vis;
+          if (vis === 'active') act.push(assignment);
+          else if (vis === 'submitted') subm.push(assignment);
+          else if (vis === 'graded') grad.push(assignment);
+          else if (vis === 'overdue') over.push(assignment);
+        } else if (userRole === 'teacher') {
+          // Teacher logic: use assignment status field and check for submissions
+          const assignmentStatus = (assignment.status || 'active').toLowerCase();
+          const hasSubmissions = mySubmissionsMap && mySubmissionsMap[assignment.id]; // Check if ANY student submitted
+          
+          map[assignment.id] = assignmentStatus;
+          
+          if (assignmentStatus === 'overdue') {
+            // Overdue assignments show only in overdue tab
+            over.push(assignment);
+          } else if (assignmentStatus === 'active') {
+            // Active assignments show in active tab
+            act.push(assignment);
+            // If any student submitted, also show in submissions tab
+            if (hasSubmissions) {
+              subm.push(assignment);
+            }
+          }
         }
       } catch (e) {
         // fallback
@@ -512,7 +502,7 @@ function CreateAssignmentDialog({ open, onOpenChange, onCreated, initial = null,
     }
 
     return { visibleStatusMap: map, activeList: act, submittedList: subm, gradedList: grad, overdueList: over };
-  }, [assignments, mySubmissionsMap]);
+  }, [assignments, mySubmissionsMap, userRole]);
 
   const filteredAssignments = React.useMemo(() => {
     if (activeFilter === 'all') return assignments;
@@ -629,22 +619,6 @@ function CreateAssignmentDialog({ open, onOpenChange, onCreated, initial = null,
                   </div>
                 )}
               </div>
-              
-              {assignment.status === 'graded' && (
-                <div className="mt-3 pt-3 border-t">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium">Score:</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold">{assignment.marks}/{assignment.totalMarks}</span>
-                      <Badge variant="outline">{assignment.grade}</Badge>
-                    </div>
-                  </div>
-                  <Progress 
-                    value={(assignment.marks / assignment.totalMarks) * 100} 
-                    className="mt-2" 
-                  />
-                </div>
-              )}
             </CardContent>
           </Card>
         ))}
@@ -689,8 +663,31 @@ function CreateAssignmentDialog({ open, onOpenChange, onCreated, initial = null,
         return;
       }
       try {
-        const subs = await api.getAssignmentSubmissions(selectedAssignment.id);
-        if (mounted) setAssignmentSubmissions(subs || []);
+        let subs = await api.getAssignmentSubmissions(selectedAssignment.id);
+        if (!subs) {
+          if (mounted) setAssignmentSubmissions([]);
+          return;
+        }
+        
+        // Normalize response (handle array, paginated, or single object)
+        if (!Array.isArray(subs)) {
+          if (subs.results && Array.isArray(subs.results)) {
+            subs = subs.results;
+          } else {
+            subs = [subs];
+          }
+        }
+        
+        // Filter to only valid submissions that:
+        // 1. Belong to the current assignment
+        // 2. Have actual submitted content (file or text)
+        const validSubs = subs.filter(s => {
+          const belongsToAssignment = String(s.assignment) === String(selectedAssignment.id) || s.assignment === selectedAssignment.id;
+          const hasSubmittedContent = s.submitted_file || s.submitted_file_url || s.submission_text || s.submissionText || s.submitted_text;
+          return belongsToAssignment && hasSubmittedContent;
+        });
+        
+        if (mounted) setAssignmentSubmissions(validSubs || []);
       } catch (err) {
         console.error('Failed to load submissions', err);
         if (mounted) setAssignmentSubmissions([]);
@@ -883,7 +880,7 @@ function CreateAssignmentDialog({ open, onOpenChange, onCreated, initial = null,
                     </div>
                 </div>
 
-                {selectedAssignment.status !== 'pending' && (
+                {(userRole === 'student' || getVisibleStatus(selectedAssignment) === 'submitted' || getVisibleStatus(selectedAssignment) === 'graded') && (
                   <div>
                     <h4 className="font-semibold mb-2">Submission Details</h4>
                     <div className="space-y-2 text-sm">
@@ -1354,7 +1351,6 @@ function CreateAssignmentDialog({ open, onOpenChange, onCreated, initial = null,
             <>
               <TabsTrigger value="active">Active ({activeList.length})</TabsTrigger>
               <TabsTrigger value="submitted">Submissions ({submittedList.length})</TabsTrigger>
-              <TabsTrigger value="graded">Completed ({gradedList.length})</TabsTrigger>
               <TabsTrigger value="overdue">Overdue ({overdueList.length})</TabsTrigger>
             </>
           )}

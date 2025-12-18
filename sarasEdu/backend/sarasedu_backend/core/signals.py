@@ -1,8 +1,9 @@
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 
-from .models import StudentProfile, TeacherProfile, AdminProfile, UserSettings, Enrollment
+from .models import StudentProfile, TeacherProfile, AdminProfile, UserSettings, Enrollment, Assignment
 
 User = get_user_model()
 
@@ -67,5 +68,22 @@ def update_course_enrollments_on_delete(sender, instance, **kwargs):
     except Exception:
         try:
             print(f'Failed to update total_enrollments for course {instance.course_id}')
+        except Exception:
+            pass
+
+
+@receiver(post_save, sender=Assignment)
+def update_assignment_status_on_save(sender, instance, **kwargs):
+    """
+    Auto-update assignment status to 'overdue' if the due_date has passed
+    and status is still 'active'.
+    """
+    try:
+        if instance.status == 'active' and instance.due_date and timezone.now() > instance.due_date:
+            # Update only the status field without triggering this signal again
+            Assignment.objects.filter(id=instance.id).update(status='overdue')
+    except Exception:
+        try:
+            print(f'Failed to update status for assignment {instance.id}')
         except Exception:
             pass
