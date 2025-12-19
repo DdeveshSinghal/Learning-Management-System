@@ -60,7 +60,8 @@ import {
   updateQuestion,
   deleteQuestion,
   deleteTest,
-  updateTest
+  updateTest,
+  getUsers
 } from '../services/api';
 
 // Props and types removed for JS build; shape: { userRole: 'student'|'teacher'|'admin' }
@@ -77,6 +78,22 @@ export function EnhancedTestSystem({ userRole }) {
   const [allTests, setAllTests] = useState([]);
   // Student's completed tests (moved up so other effects can reference it)
   const [currentUser, setCurrentUser] = useState(null);
+  // Lookup table for user id -> user object (for displaying real names)
+  const [userLookup, setUserLookup] = useState({});
+
+  const resolveStudentName = (id, fallbackName) => {
+    const key = id != null ? String(id) : null;
+    const user = key ? userLookup[key] : null;
+    if (user) {
+      const full = [user.first_name, user.last_name].filter(Boolean).join(' ').trim();
+      if (full) return full;
+      if (user.username) return user.username;
+      if (user.email) return user.email.split('@')[0];
+    }
+    if (fallbackName && String(fallbackName).trim()) return fallbackName;
+    if (key) return `Student ${key}`;
+    return 'Student';
+  };
 
   // Safely coerce various numeric fields that may come as strings or null
   const safeNumber = (v) => {
@@ -84,6 +101,26 @@ export function EnhancedTestSystem({ userRole }) {
     const n = parseFloat(v);
     return Number.isFinite(n) ? n : 0;
   };
+
+  // Load all users so we can display real student names in submissions/leaderboards
+  useEffect(() => {
+    let mounted = true;
+    async function loadUsers() {
+      try {
+        const users = await getUsers();
+        if (!mounted) return;
+        const map = {};
+        (users || []).forEach(u => {
+          if (u && u.id != null) map[String(u.id)] = u;
+        });
+        setUserLookup(map);
+      } catch (e) {
+        console.warn('Failed to load users', e);
+      }
+    }
+    loadUsers();
+    return () => { mounted = false; };
+  }, []);
 
   // load tests from backend and map backend fields to frontend shape
   useEffect(() => {
@@ -104,7 +141,9 @@ export function EnhancedTestSystem({ userRole }) {
               correctAnswer: q.correct_answer || q.correctAnswer || ''
             }));
 
-            let submissions = await getTestSubmissions(t.id, { student: currentUser && (currentUser.id || currentUser.pk || currentUser.user_id) });
+            // Prefer submissions already embedded on the test object (often includes all students),
+            // otherwise fall back to the submissions endpoint which may be user-scoped for students.
+            let submissions = Array.isArray(t.submissions) ? t.submissions : await getTestSubmissions(t.id);
             // Defensive: ensure submissions actually belong to this test. Some
             // backends or proxy layers may return rows not strictly scoped by
             // test id — filter by the submission.test/test_id field if present.
@@ -116,31 +155,23 @@ export function EnhancedTestSystem({ userRole }) {
               // conservative fallback to avoid dropping valid rows for older APIs.
               return true;
             });
-
-            // If a student is authenticated, and the current viewer is a student,
-            // restrict submissions to that student's rows only so the UI shows
-            // submissions/questions according to the student id (used for auth)
-            try {
-              const uid = currentUser && (currentUser.id || currentUser.pk || currentUser.user_id);
-              const viewerIsStudent = (userRole === 'student') || (currentUser && (currentUser.role === 'student' || currentUser.user_type === 'student'));
-              if (uid != null && viewerIsStudent) {
-                submissions = (submissions || []).filter(s => {
-                  const sid = s.student ?? s.student_id ?? s.studentId ?? s.student_pk;
-                  return sid != null && String(sid) === String(uid);
-                });
-              }
-            } catch (e) {
-              // ignore filtering errors and fall back to server-provided submissions
-            }
             // map submissions to UI-friendly shape where possible
             const mappedSubs = (submissions || []).map(s => {
               const score = safeNumber(s.marks_obtained);
               const totalPoints = safeNumber(t.total_marks) || mappedQuestions.reduce((sum, q) => sum + safeNumber(q.points), 0);
               const percentage = totalPoints > 0 ? Math.round((score / totalPoints) * 100) : score;
+              // Resolve student identity for leaderboard and display
+              const studentId = (s.student && s.student.id) ?? s.student ?? s.student_id ?? s.studentId;
+              const fallbackName = s.student_name
+                || s.student_username
+                || (s.student && ((s.student.full_name) || [s.student.first_name, s.student.last_name].filter(Boolean).join(' ').trim() || s.student.username))
+                || (studentId != null ? `Student ${studentId}` : 'Student');
+              const studentName = resolveStudentName(studentId, fallbackName);
               return {
-                studentId: s.student,
-                studentName: (s.student_name || s.student_username) || `Student ${s.student}`,
-                submittedAt: s.submit_time || s.start_time || null,
+                id: s.id,
+                studentId,
+                studentName,
+                submittedAt: s.submit_time || s.start_time || s.created_at || null,
                 score,
                 totalPoints,
                 percentage,
@@ -177,7 +208,7 @@ export function EnhancedTestSystem({ userRole }) {
     // apply student-scoped submission filtering based on authenticated id.
     load();
     return () => { mounted = false; };
-  }, [currentUser]);
+  }, [currentUser, userLookup]);
 
   useEffect(() => {
     let mounted = true;
@@ -410,7 +441,7 @@ export function EnhancedTestSystem({ userRole }) {
         // Update local UI model: append submission info to test
         const newSubmission = {
           studentId: submission.student || submission.student_id || null,
-          studentName: submission.student_name || `Student ${submission.student || submission.student_id || ''}`,
+          studentName: resolveStudentName(submission.student || submission.student_id, submission.student_name),
           submittedAt: submission.submit_time || new Date().toLocaleString(),
           answers: currentTestAnswers,
           score: result.score,
@@ -866,15 +897,22 @@ export function EnhancedTestSystem({ userRole }) {
             correctAnswer: q.correct_answer || q.correctAnswer || ''
           }));
 
-          const submissions = await getTestSubmissions(test.id, { student: currentUser && (currentUser.id || currentUser.pk || currentUser.user_id) }).catch(() => []);
+          const submissions = await getTestSubmissions(test.id).catch(() => []);
           const mappedSubs = (submissions || []).map(s => {
             const score = safeNumber(s.marks_obtained);
             const totalPoints = safeNumber(refreshed.total_marks) || mappedQuestions.reduce((sum, q) => sum + safeNumber(q.points), 0);
             const percentage = totalPoints > 0 ? Math.round((score / totalPoints) * 100) : score;
+            const studentId = (s.student && s.student.id) ?? s.student ?? s.student_id ?? s.studentId;
+            const fallbackName = s.student_name
+              || s.student_username
+              || (s.student && ((s.student.full_name) || [s.student.first_name, s.student.last_name].filter(Boolean).join(' ').trim() || s.student.username))
+              || (studentId != null ? `Student ${studentId}` : 'Student');
+            const studentName = resolveStudentName(studentId, fallbackName);
             return {
-              studentId: s.student,
-              studentName: s.student_name || s.student_username || `Student ${s.student}`,
-              submittedAt: s.submit_time || s.start_time || null,
+              id: s.id,
+              studentId,
+              studentName,
+              submittedAt: s.submit_time || s.start_time || s.created_at || null,
               score,
               totalPoints,
               percentage,
@@ -2309,7 +2347,7 @@ export function EnhancedTestSystem({ userRole }) {
                         <div className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold">
                           {((student.name || '').split(/\s+/).filter(Boolean).map(n => n[0]).join('')) || (student.name ? student.name[0] : '?')}
                         </div>
-                      </div>
+                      </div> 
 
                       <div className="flex-1">
                         <div className="flex items-center gap-2">

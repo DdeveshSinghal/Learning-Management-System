@@ -299,6 +299,36 @@ class AssignmentViewSet(BaseModelViewSet):
         else:
             serializer.save()
 
+    def get_queryset(self):
+        """
+        Auto-update DB statuses so overdue assignments flip from 'active' to 'overdue'
+        before we return any assignment results. This keeps the database in sync
+        without requiring a separate scheduler. The update is idempotent and cheap.
+        """
+        try:
+            # Update any active assignments whose due_date has already passed
+            Assignment.objects.filter(status='active', due_date__lt=timezone.now()).update(status='overdue')
+        except Exception:
+            # Never fail the request if the maintenance update encounters an issue
+            pass
+
+        qs = super().get_queryset()
+        # Optional filters for convenience
+        rp = getattr(self.request, 'query_params', {})
+        course = rp.get('course') or rp.get('course_id')
+        created_by = rp.get('created_by') or rp.get('created_by_id')
+        if course:
+            try:
+                qs = qs.filter(course_id=course)
+            except Exception:
+                pass
+        if created_by:
+            try:
+                qs = qs.filter(created_by_id=created_by)
+            except Exception:
+                pass
+        return qs
+
 
 class AssignmentSubmissionViewSet(BaseModelViewSet):
     queryset = AssignmentSubmission.objects.all()

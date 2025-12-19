@@ -192,6 +192,12 @@ export async function me() {
   return await request('/auth/me', { method: 'GET' });
 }
 
+export async function getUsers() {
+  const data = await request('/users', { method: 'GET' });
+  if (data && data.results) return data.results;
+  return data || [];
+}
+
 export function logout() {
   _safeLocalRemove('access');
   _safeLocalRemove('refresh');
